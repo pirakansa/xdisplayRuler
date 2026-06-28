@@ -1,7 +1,11 @@
 # displayRuler
 
-This repository provides a small Rust CLI that prints a terminal display ruler.
-It is useful when checking text width, alignment, and wrapping behavior in a terminal.
+displayRuler is a Rust CLI foundation for tracking Xorg display and window
+state on kiosk-style Linux systems.
+
+The current build provides the core in-memory state engine for connected
+outputs, output geometry, mapped windows, stacking order, and focused windows.
+The Xorg/XRandR event backend is not implemented yet.
 
 ## Setup
 
@@ -14,6 +18,25 @@ Build the project once after cloning:
 vorbere run build
 ```
 
+## Quick Start
+
+Print the current built-in snapshot:
+
+```bash
+vorbere run run
+```
+
+Expected output for the current in-memory backend:
+
+```text
+display-ruler
+backend: in-memory
+outputs: 0
+windows: 0
+focused: none
+top: none
+```
+
 ## Common Commands
 
 - Run: `vorbere run run`
@@ -23,14 +46,7 @@ vorbere run build
 
 ## Project Structure
 
-- `src/lib.rs`: ruler generation logic
+- `src/lib.rs`: display state model and event reducer
 - `src/main.rs`: CLI entry point
-- `tests/`: smoke test for the compiled binary
+- `tests/`: smoke tests for the compiled binary
 - `vorbere.yaml`: local development tasks
-
-## Expected Output
-
-```text
-0         1         2         3         4         5         6         7
-12345678901234567890123456789012345678901234567890123456789012345678901234567890
-```

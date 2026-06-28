@@ -2,7 +2,7 @@
 name = "display-ruler"
 version = "0.1.0"
 edition = "2021"
-description = "CLI that prints a terminal display ruler"
+description = "CLI foundation for tracking Xorg display and window state"
 license = "MIT OR Apache-2.0"
 repository = ""
 readme = "README.md"
@@ -12,4 +12,3 @@ codegen-units = 1
 lto = true
 opt-level = "z"
 strip = true
-
