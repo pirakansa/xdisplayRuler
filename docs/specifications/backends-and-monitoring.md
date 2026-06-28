@@ -46,8 +46,8 @@ The current X11 backend can also send low-level stacking requests:
 `status_report()` renders the current state with the backend label.
 
 The CLI uses this flow for both `snapshot` and `watch` commands. `snapshot`
-refreshes once. `watch` refreshes repeatedly, optionally bounded by
-`--iterations`.
+refreshes once. `watch` refreshes repeatedly until stopped, unless a test or
+diagnostic run bounds it with `--iterations`.
 
 ## Planned Backend
 

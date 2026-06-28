@@ -41,13 +41,14 @@ Watch mode repeatedly refreshes the selected backend and prints a snapshot after
 each refresh:
 
 ```bash
-xdisplay-ruler watch --iterations 3 --interval-ms 1000
+xdisplay-ruler watch
 ```
 
 With the X11 backend, watch mode prints the initial snapshot and then waits for
 RandR or root-window events before printing the next snapshot.
 
-Omit `--iterations` to keep watching until the process is stopped.
+Use `--iterations N` only when a test, script, or diagnostic check needs watch
+mode to stop after a fixed number of snapshots.
 
 ## Change Window Stacking
 

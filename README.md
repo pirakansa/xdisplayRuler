@@ -14,10 +14,10 @@ Print a snapshot from the running Xorg server:
 xdisplay-ruler
 ```
 
-Run bounded watch mode:
+Watch display and window changes:
 
 ```bash
-xdisplay-ruler watch --iterations 3 --interval-ms 1000
+xdisplay-ruler watch
 ```
 
 The explicit X11 backend form is equivalent:

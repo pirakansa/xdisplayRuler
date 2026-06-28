@@ -12,10 +12,9 @@ The binary is named `xdisplay-ruler`.
 - `--backend x11` or `--backend xorg`: select the X11/RandR backend.
 - `--backend in-memory`: select the deterministic in-memory backend for tests
   and diagnostics.
-- `--interval-ms MS`: set the delay between `watch` refreshes. The value must
-  be a positive integer. The default is `1000`.
-- `--iterations N`: stop `watch` mode after `N` refreshes. The value must be a
-  positive integer. When omitted, `watch` keeps running.
+- `--iterations N`: stop `watch` mode after `N` snapshots. This is intended for
+  tests, scripts, and diagnostics. The value must be a positive integer. When
+  omitted, `watch` keeps running.
 - `--window ID`: select an X11 window ID for `raise` or `lower`. Hex values such
   as `0x800003` and decimal values are accepted.
 - `--help` or `-h`: print command help.

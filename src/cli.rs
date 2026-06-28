@@ -1,8 +1,4 @@
-use std::{
-    io::{self, Write},
-    thread,
-    time::Duration,
-};
+use std::io::{self, Write};
 
 use crate::{BackendError, ConfiguredBackend, DisplayMonitor, WindowId};
 
@@ -11,7 +7,7 @@ xdisplay-ruler
 
 Usage:
   xdisplay-ruler [snapshot] [--backend x11]
-  xdisplay-ruler watch [--backend x11] [--interval-ms MS] [--iterations N]
+  xdisplay-ruler watch [--backend x11] [--iterations N]
   xdisplay-ruler raise --window ID [--backend x11]
   xdisplay-ruler lower --window ID [--backend x11]
   xdisplay-ruler --help
@@ -25,8 +21,7 @@ Commands:
 
 Options:
   --backend NAME      Backend to use. Supported: x11.
-  --interval-ms MS    Delay between watch refreshes. Default: 1000.
-  --iterations N      Stop watch mode after N refreshes.
+  --iterations N      Stop watch after N snapshots for tests and diagnostics.
   --window ID         X11 window ID as hex, for example 0x800003.
 ";
 
@@ -48,7 +43,6 @@ enum Command {
 struct CliOptions {
     command: Command,
     backend_name: String,
-    interval: Duration,
     iterations: Option<usize>,
     window_id: Option<WindowId>,
 }
@@ -58,7 +52,6 @@ impl Default for CliOptions {
         Self {
             command: Command::Snapshot,
             backend_name: "x11".to_string(),
-            interval: Duration::from_millis(1_000),
             iterations: None,
             window_id: None,
         }
@@ -154,11 +147,6 @@ fn parse_options(arguments: &[String]) -> Result<CliOptions, String> {
                 validate_backend_name(value)?;
                 options.backend_name = value.to_string();
             }
-            "--interval-ms" => {
-                let value = next_value(arguments, &mut index, "--interval-ms")?;
-                options.interval =
-                    Duration::from_millis(parse_non_zero_u64(value, "--interval-ms")?);
-            }
             "--iterations" => {
                 let value = next_value(arguments, &mut index, "--iterations")?;
                 options.iterations = Some(parse_non_zero_usize(value, "--iterations")?);
@@ -199,18 +187,6 @@ fn validate_backend_name(value: &str) -> Result<(), String> {
         "in-memory" | "x11" | "xorg" => Ok(()),
         _ => Err(format!("unsupported backend: {value}")),
     }
-}
-
-fn parse_non_zero_u64(value: &str, option_name: &str) -> Result<u64, String> {
-    let value = value
-        .parse::<u64>()
-        .map_err(|_| format!("{option_name} must be a positive integer"))?;
-
-    if value == 0 {
-        return Err(format!("{option_name} must be a positive integer"));
-    }
-
-    Ok(value)
 }
 
 fn parse_non_zero_usize(value: &str, option_name: &str) -> Result<usize, String> {
@@ -262,8 +238,6 @@ fn run_watch(options: CliOptions, stdout: &mut impl Write) -> Result<(), String>
         if options.iterations == Some(iteration) {
             break;
         }
-
-        thread::sleep(options.interval);
     }
 
     Ok(())
@@ -361,15 +335,7 @@ mod tests {
         let mut stderr = Vec::new();
 
         let exit = run(
-            [
-                "watch",
-                "--backend",
-                "in-memory",
-                "--iterations",
-                "2",
-                "--interval-ms",
-                "1",
-            ],
+            ["watch", "--backend", "in-memory", "--iterations", "2"],
             &mut stdout,
             &mut stderr,
         )
