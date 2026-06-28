@@ -22,6 +22,7 @@ The current X11 backend collects an initial snapshot:
 - RANDR outputs and CRTC geometry
 - root-level viewable windows
 - root-level window geometry
+- root-level window titles from `_NET_WM_NAME`, falling back to `WM_NAME`
 - current input focus
 
 After the initial snapshot, the X11 backend subscribes to RANDR and root-window
@@ -32,6 +33,8 @@ The current X11 backend can also send low-level stacking requests:
 
 - raise a window with X11 `ConfigureWindow` stack mode `Above`
 - lower a window with X11 `ConfigureWindow` stack mode `Below`
+- move or resize a window by sending provided X, Y, width, and height fields
+  with X11 `ConfigureWindow`
 - place a window fullscreen on a RandR output by configuring its X, Y, width,
   and height to the selected output geometry, then raising it
 

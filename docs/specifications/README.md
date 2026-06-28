@@ -12,6 +12,7 @@ project evolves. Code and passing tests are the source of truth.
 - X11/RandR and root-window event subscription for watch mode
 - X11 fullscreen placement command
 - X11 window raise and lower commands
+- X11 window move and resize command
 - Display output connection, disconnection, geometry, and primary-output state
 - Window mapping, unmapping, geometry, stacking order, and focus state
 - CLI snapshot, watch, backend selection, help, version, and usage-error handling
@@ -19,7 +20,7 @@ project evolves. Code and passing tests are the source of truth.
 ## Out of Scope
 
 - Display mode switching
-- General window move, resize, or focus commands
+- Window focus commands
 - Persistent configuration
 
 ## References

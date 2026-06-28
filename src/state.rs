@@ -101,7 +101,12 @@ impl DisplayState {
             .iter()
             .map(|window| {
                 let mapped = if window.mapped { "mapped" } else { "unmapped" };
-                format!("- {}: {} {}\n", window.id, mapped, window.geometry)
+                let title = window
+                    .title
+                    .as_deref()
+                    .map(window_title_report)
+                    .unwrap_or_default();
+                format!("- {}: {} {}{}\n", window.id, mapped, window.geometry, title)
             })
             .collect()
     }
@@ -187,6 +192,23 @@ impl DisplayState {
     }
 }
 
+fn window_title_report(title: &str) -> String {
+    if title.is_empty() {
+        return String::new();
+    }
+
+    format!(" title=\"{}\"", escape_report_value(title))
+}
+
+fn escape_report_value(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{DisplayEvent, DisplayOutput, DisplayState, Rect, WindowId, WindowInfo};
@@ -241,6 +263,19 @@ mod tests {
         assert_eq!(state.stacking_order(), &[second]);
         assert_eq!(state.top_window(), Some(second));
         assert_eq!(state.focused_window(), None);
+    }
+
+    #[test]
+    fn status_report_includes_escaped_window_title_when_present() {
+        let mut state = DisplayState::new();
+        let mut window = WindowInfo::mapped(WindowId(0x20), Rect::new(0, 0, 800, 600));
+        window.title = Some("hello \"display\"\n".to_string());
+
+        state.apply(DisplayEvent::WindowMapped(window));
+
+        assert!(state
+            .status_report()
+            .contains("- 0x20: mapped 800x600+0+0 title=\"hello \\\"display\\\"\\n\""));
     }
 
     #[test]

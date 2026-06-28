@@ -13,7 +13,9 @@ use x11rb::{
     rust_connection::RustConnection,
 };
 
-use crate::{DisplayBackend, DisplayEvent, DisplayOutput, Rect, WindowId, WindowInfo};
+use crate::{
+    DisplayBackend, DisplayEvent, DisplayOutput, Rect, WindowGeometryChange, WindowId, WindowInfo,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct X11Snapshot {
@@ -275,24 +277,29 @@ impl X11Backend {
     }
 
     fn window_title(&self, window: u32) -> io::Result<Option<String>> {
-        let atom_name = self.intern_atom("_NET_WM_NAME")?;
-        let atom_utf8 = self.intern_atom("UTF8_STRING")?;
+        if let Some(title) = self.window_text_property(window, "_NET_WM_NAME", "UTF8_STRING")? {
+            return Ok(Some(title));
+        }
+
+        self.window_text_property(window, "WM_NAME", "STRING")
+    }
+
+    fn window_text_property(
+        &self,
+        window: u32,
+        property_name: &str,
+        property_type: &str,
+    ) -> io::Result<Option<String>> {
+        let property_atom = self.intern_atom(property_name)?;
+        let type_atom = self.intern_atom(property_type)?;
         let property = self
             .connection
-            .get_property(false, window, atom_name, atom_utf8, 0, 1024)
+            .get_property(false, window, property_atom, type_atom, 0, 1024)
             .map_err(to_io_error)?
             .reply()
             .map_err(to_io_error)?;
 
-        if property.value.is_empty() {
-            return Ok(None);
-        }
-
-        Ok(Some(
-            String::from_utf8_lossy(&property.value)
-                .trim_end_matches('\0')
-                .to_string(),
-        ))
+        Ok(text_property_value(&property.value))
     }
 
     fn intern_atom(&self, name: &str) -> io::Result<u32> {
@@ -335,6 +342,38 @@ impl X11Backend {
         self.raise_window(id)
     }
 
+    pub fn configure_window(&self, id: WindowId, change: &WindowGeometryChange) -> io::Result<()> {
+        if change.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "at least one of --x, --y, --width, or --height is required",
+            ));
+        }
+
+        let window = x11_window_id(id)?;
+        let mut changes = ConfigureWindowAux::new();
+
+        if let Some(x) = change.x {
+            changes = changes.x(x);
+        }
+        if let Some(y) = change.y {
+            changes = changes.y(y);
+        }
+        if let Some(width) = change.width {
+            changes = changes.width(width);
+        }
+        if let Some(height) = change.height {
+            changes = changes.height(height);
+        }
+
+        self.connection
+            .configure_window(window, &changes)
+            .map_err(to_io_error)?
+            .check()
+            .map_err(to_io_error)?;
+        self.connection.flush().map_err(to_io_error)
+    }
+
     fn stack_window(&self, id: WindowId, stack_mode: StackMode) -> io::Result<()> {
         let window = x11_window_id(id)?;
         let changes = ConfigureWindowAux::new().stack_mode(stack_mode);
@@ -361,6 +400,22 @@ impl X11Backend {
             .check()
             .map_err(to_io_error)?;
         self.connection.flush().map_err(to_io_error)
+    }
+}
+
+fn text_property_value(value: &[u8]) -> Option<String> {
+    if value.is_empty() {
+        return None;
+    }
+
+    let text = String::from_utf8_lossy(value)
+        .trim_end_matches('\0')
+        .to_string();
+
+    if text.is_empty() {
+        None
+    } else {
+        Some(text)
     }
 }
 
@@ -422,7 +477,9 @@ fn to_io_error(error: impl std::fmt::Display) -> io::Error {
 
 #[cfg(test)]
 mod tests {
-    use super::{x11_window_id, X11OutputSnapshot, X11Snapshot, X11WindowSnapshot};
+    use super::{
+        text_property_value, x11_window_id, X11OutputSnapshot, X11Snapshot, X11WindowSnapshot,
+    };
     use crate::{DisplayEvent, DisplayOutput, Rect, WindowId, WindowInfo};
 
     #[test]
@@ -496,5 +553,19 @@ mod tests {
             u32::MAX
         );
         assert!(x11_window_id(WindowId(u64::from(u32::MAX) + 1)).is_err());
+    }
+
+    #[test]
+    fn normalizes_text_property_values() {
+        assert_eq!(
+            text_property_value(b"plain title"),
+            Some("plain title".to_string())
+        );
+        assert_eq!(
+            text_property_value(b"legacy title\0\0"),
+            Some("legacy title".to_string())
+        );
+        assert_eq!(text_property_value(b""), None);
+        assert_eq!(text_property_value(b"\0\0"), None);
     }
 }

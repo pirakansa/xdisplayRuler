@@ -38,6 +38,12 @@ Place a window fullscreen on an output:
 xdisplay-ruler place --window 0x800003 --output HDMI-2 --fullscreen
 ```
 
+Move or resize a window:
+
+```bash
+xdisplay-ruler configure --window 0x800003 --x 0 --y 0 --width 480 --height 260
+```
+
 ## Development Setup
 
 - Rust stable

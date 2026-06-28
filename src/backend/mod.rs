@@ -14,6 +14,20 @@ pub enum ConfiguredBackend {
     X11(Box<X11Backend>),
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct WindowGeometryChange {
+    pub x: Option<i32>,
+    pub y: Option<i32>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+}
+
+impl WindowGeometryChange {
+    pub fn is_empty(&self) -> bool {
+        self.x.is_none() && self.y.is_none() && self.width.is_none() && self.height.is_none()
+    }
+}
+
 impl ConfiguredBackend {
     pub fn from_name(name: &str) -> Result<Self, BackendError> {
         match name {
@@ -53,6 +67,16 @@ impl ConfiguredBackend {
                 "in-memory backend cannot place X11 windows",
             )),
             Self::X11(backend) => backend.place_window_fullscreen(id, output_name),
+        }
+    }
+
+    pub fn configure_window(&self, id: WindowId, change: &WindowGeometryChange) -> io::Result<()> {
+        match self {
+            Self::InMemory(_) => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "in-memory backend cannot configure X11 windows",
+            )),
+            Self::X11(backend) => backend.configure_window(id, change),
         }
     }
 }

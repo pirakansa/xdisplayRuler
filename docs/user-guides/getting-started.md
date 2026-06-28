@@ -74,6 +74,29 @@ These commands use low-level X11 stacking requests. They do not require a window
 manager, but they require the target application window to accept normal X11
 configuration requests.
 
+## Move or Resize a Window
+
+Move a window without changing its size:
+
+```bash
+xdisplay-ruler configure --window 0x800003 --x 0 --y 0
+```
+
+Resize a window without changing its position:
+
+```bash
+xdisplay-ruler configure --window 0x800003 --width 480 --height 260
+```
+
+Move and resize in one request:
+
+```bash
+xdisplay-ruler configure --window 0x800003 --x 0 --y 0 --width 480 --height 260
+```
+
+`configure` requires at least one geometry option. Width and height must be
+positive integers.
+
 ## Place a Window
 
 Use the output names from an X11 snapshot:

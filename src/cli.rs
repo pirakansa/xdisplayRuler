@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 
-use crate::{BackendError, ConfiguredBackend, DisplayMonitor, WindowId};
+use crate::{BackendError, ConfiguredBackend, DisplayMonitor, WindowGeometryChange, WindowId};
 
 const HELP: &str = "\
 xdisplay-ruler
@@ -9,6 +9,7 @@ Usage:
   xdisplay-ruler [snapshot] [--backend x11]
   xdisplay-ruler watch [--backend x11] [--iterations N]
   xdisplay-ruler place --window ID --output NAME --fullscreen [--backend x11]
+  xdisplay-ruler configure --window ID [--x N] [--y N] [--width N] [--height N] [--backend x11]
   xdisplay-ruler raise --window ID [--backend x11]
   xdisplay-ruler lower --window ID [--backend x11]
   xdisplay-ruler --help
@@ -18,6 +19,7 @@ Commands:
   snapshot  Print one display-state snapshot. This is the default command.
   watch     Keep refreshing and printing display-state snapshots.
   place     Place a window on an output.
+  configure Move or resize a window.
   raise     Raise a window above its siblings.
   lower     Lower a window below its siblings.
 
@@ -27,6 +29,10 @@ Options:
   --output NAME       X11 RandR output name, for example HDMI-2.
   --fullscreen        Resize and move the window to fill the output.
   --window ID         X11 window ID as hex, for example 0x800003.
+  --x N               Window X position for configure.
+  --y N               Window Y position for configure.
+  --width N           Window width for configure.
+  --height N          Window height for configure.
 ";
 
 #[derive(Debug, Eq, PartialEq)]
@@ -40,6 +46,7 @@ enum Command {
     Snapshot,
     Watch,
     Place,
+    Configure,
     Raise,
     Lower,
 }
@@ -52,6 +59,7 @@ struct CliOptions {
     output_name: Option<String>,
     fullscreen: bool,
     window_id: Option<WindowId>,
+    geometry_change: WindowGeometryChange,
 }
 
 impl Default for CliOptions {
@@ -63,6 +71,7 @@ impl Default for CliOptions {
             output_name: None,
             fullscreen: false,
             window_id: None,
+            geometry_change: WindowGeometryChange::default(),
         }
     }
 }
@@ -112,6 +121,7 @@ where
         }
         Command::Watch => handle_command_result(run_watch(options, stdout), stderr),
         Command::Place => handle_command_result(run_place_command(options), stderr),
+        Command::Configure => handle_command_result(run_configure_command(options), stderr),
         Command::Raise => {
             handle_command_result(run_stack_command(options, StackCommand::Raise), stderr)
         }
@@ -137,6 +147,11 @@ fn parse_options(arguments: &[String]) -> Result<CliOptions, String> {
             }
             "place" => {
                 options.command = Command::Place;
+                options.backend_name = "x11".to_string();
+                index = 1;
+            }
+            "configure" => {
+                options.command = Command::Configure;
                 options.backend_name = "x11".to_string();
                 index = 1;
             }
@@ -177,6 +192,22 @@ fn parse_options(arguments: &[String]) -> Result<CliOptions, String> {
                 let value = next_value(arguments, &mut index, "--window")?;
                 options.window_id = Some(parse_window_id(value)?);
             }
+            "--x" => {
+                let value = next_value(arguments, &mut index, "--x")?;
+                options.geometry_change.x = Some(parse_i32(value, "--x")?);
+            }
+            "--y" => {
+                let value = next_value(arguments, &mut index, "--y")?;
+                options.geometry_change.y = Some(parse_i32(value, "--y")?);
+            }
+            "--width" => {
+                let value = next_value(arguments, &mut index, "--width")?;
+                options.geometry_change.width = Some(parse_positive_u32(value, "--width")?);
+            }
+            "--height" => {
+                let value = next_value(arguments, &mut index, "--height")?;
+                options.geometry_change.height = Some(parse_positive_u32(value, "--height")?);
+            }
             argument => return Err(format!("unknown argument: {argument}")),
         }
 
@@ -214,6 +245,24 @@ fn validate_backend_name(value: &str) -> Result<(), String> {
 fn parse_non_zero_usize(value: &str, option_name: &str) -> Result<usize, String> {
     let value = value
         .parse::<usize>()
+        .map_err(|_| format!("{option_name} must be a positive integer"))?;
+
+    if value == 0 {
+        return Err(format!("{option_name} must be a positive integer"));
+    }
+
+    Ok(value)
+}
+
+fn parse_i32(value: &str, option_name: &str) -> Result<i32, String> {
+    value
+        .parse::<i32>()
+        .map_err(|_| format!("{option_name} must be an integer"))
+}
+
+fn parse_positive_u32(value: &str, option_name: &str) -> Result<u32, String> {
+    let value = value
+        .parse::<u32>()
         .map_err(|_| format!("{option_name} must be a positive integer"))?;
 
     if value == 0 {
@@ -293,6 +342,21 @@ fn run_place_command(options: CliOptions) -> Result<(), String> {
     let backend = build_backend(&options.backend_name)?;
     backend
         .place_window_fullscreen(window_id, &output_name)
+        .map_err(|error| error.to_string())
+}
+
+fn run_configure_command(options: CliOptions) -> Result<(), String> {
+    let window_id = options
+        .window_id
+        .ok_or_else(|| "--window is required".to_string())?;
+
+    if options.geometry_change.is_empty() {
+        return Err("at least one of --x, --y, --width, or --height is required".to_string());
+    }
+
+    let backend = build_backend(&options.backend_name)?;
+    backend
+        .configure_window(window_id, &options.geometry_change)
         .map_err(|error| error.to_string())
 }
 
@@ -482,6 +546,104 @@ mod tests {
         assert_eq!(
             String::from_utf8_lossy(&stderr),
             "in-memory backend cannot place X11 windows\ntry --help\n"
+        );
+    }
+
+    #[test]
+    fn requires_window_and_geometry_for_configure() {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let exit =
+            run(["configure", "--x", "10"], &mut stdout, &mut stderr).expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "--window is required\ntry --help\n"
+        );
+
+        stderr.clear();
+        let exit = run(
+            ["configure", "--window", "0x800003"],
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "at least one of --x, --y, --width, or --height is required\ntry --help\n"
+        );
+    }
+
+    #[test]
+    fn validates_configure_geometry_values() {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let exit = run(
+            ["configure", "--window", "0x800003", "--width", "0"],
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "--width must be a positive integer\ntry --help\n"
+        );
+
+        stderr.clear();
+        let exit = run(
+            ["configure", "--window", "0x800003", "--x", "left"],
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "--x must be an integer\ntry --help\n"
+        );
+    }
+
+    #[test]
+    fn rejects_configure_for_in_memory_backend() {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let exit = run(
+            [
+                "configure",
+                "--backend",
+                "in-memory",
+                "--window",
+                "0x800003",
+                "--x",
+                "-20",
+                "--y",
+                "10",
+                "--width",
+                "480",
+                "--height",
+                "260",
+            ],
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "in-memory backend cannot configure X11 windows\ntry --help\n"
         );
     }
 
