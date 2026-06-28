@@ -8,7 +8,7 @@ monitor flow, CLI snapshot output, and an X11/RandR snapshot backend.
 
 ## Quick Start
 
-Print the current in-memory snapshot with the released binary:
+Print a snapshot from the running Xorg server:
 
 ```bash
 xdisplay-ruler
@@ -20,7 +20,7 @@ Run bounded watch mode:
 xdisplay-ruler watch --iterations 3 --interval-ms 1000
 ```
 
-Read a snapshot from the running Xorg server:
+The explicit X11 backend form is equivalent:
 
 ```bash
 xdisplay-ruler snapshot --backend x11

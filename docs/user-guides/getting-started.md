@@ -1,7 +1,7 @@
 # Getting Started
 
-`xdisplay-ruler` can print either the built-in in-memory snapshot or a snapshot
-read from a running Xorg server.
+`xdisplay-ruler` reads display and window state from a running Xorg server by
+default.
 
 ## Print a Snapshot
 
@@ -9,7 +9,10 @@ read from a running Xorg server.
 xdisplay-ruler
 ```
 
-The current default snapshot uses the in-memory backend, so it starts empty:
+The default command uses the X11 backend and requires a reachable Xorg server
+through `DISPLAY`.
+
+For development and diagnostics, the in-memory backend starts empty:
 
 ```text
 xdisplay-ruler
@@ -23,14 +26,13 @@ top: none
 The explicit snapshot command is equivalent:
 
 ```bash
-xdisplay-ruler snapshot --backend in-memory
+xdisplay-ruler snapshot --backend x11
 ```
 
-Use the X11 backend to read outputs and root-level windows from the running Xorg
-server:
+Use the in-memory backend only when you need a deterministic empty snapshot:
 
 ```bash
-xdisplay-ruler snapshot --backend x11
+xdisplay-ruler snapshot --backend in-memory
 ```
 
 ## Watch Snapshots

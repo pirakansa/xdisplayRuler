@@ -3,6 +3,7 @@ use std::process::Command;
 #[test]
 fn it_prints_an_empty_display_state_snapshot() {
     let output = Command::new(env!("CARGO_BIN_EXE_xdisplay-ruler"))
+        .args(["snapshot", "--backend", "in-memory"])
         .output()
         .expect("binary should run");
 

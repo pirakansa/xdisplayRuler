@@ -10,8 +10,8 @@ const HELP: &str = "\
 xdisplay-ruler
 
 Usage:
-  xdisplay-ruler [snapshot] [--backend in-memory|x11]
-  xdisplay-ruler watch [--backend in-memory|x11] [--interval-ms MS] [--iterations N]
+  xdisplay-ruler [snapshot] [--backend x11]
+  xdisplay-ruler watch [--backend x11] [--interval-ms MS] [--iterations N]
   xdisplay-ruler raise --window ID [--backend x11]
   xdisplay-ruler lower --window ID [--backend x11]
   xdisplay-ruler --help
@@ -24,7 +24,7 @@ Commands:
   lower     Lower a window below its siblings.
 
 Options:
-  --backend NAME      Backend to use. Supported: in-memory, x11.
+  --backend NAME      Backend to use. Supported: x11.
   --interval-ms MS    Delay between watch refreshes. Default: 1000.
   --iterations N      Stop watch mode after N refreshes.
   --window ID         X11 window ID as hex, for example 0x800003.
@@ -57,7 +57,7 @@ impl Default for CliOptions {
     fn default() -> Self {
         Self {
             command: Command::Snapshot,
-            backend_name: "in-memory".to_string(),
+            backend_name: "x11".to_string(),
             interval: Duration::from_millis(1_000),
             iterations: None,
             window_id: None,
