@@ -1,0 +1,55 @@
+version: 1
+tasks:
+  build:
+    run: cargo build --locked
+    desc: Build debug artifacts
+
+  run:
+    run: RUST_LOG=debug cargo run
+    desc: Run the hello world binary
+
+  fmt:
+    run: cargo fmt --all
+    desc: Format Rust code
+
+  fmt-check:
+    run: cargo fmt --all -- --check
+    desc: Check Rust formatting
+
+  clippy:
+    run: cargo clippy --all-targets -- -D warnings
+    desc: Run clippy with warnings denied
+
+  check:
+    depends_on: [fmt-check, clippy]
+    desc: Run all lint checks
+
+  test:
+    depends_on: [check, build]
+    run: cargo test --all
+    desc: Run test suite
+# cargo install cargo-audit
+  vulnerability:
+    run: cargo audit
+    desc: Scan dependencies for known vulnerabilities
+
+  clean:
+    run: cargo clean
+    desc: Clean build artifacts
+
+  release-build:
+    run: cargo build --locked --release
+    desc: Build release binary
+
+  release-archives:
+    depends_on: [release-build]
+    run: tar --gzip --create --directory=target/release --file=./cli-template.tar.gz cli-template
+    desc: Archive the release binary
+
+  release:
+    depends_on: [release-archives]
+    desc: Build and archive release artifacts
+
+  ci:
+    depends_on: [check, test, build]
+    desc: Run CI-equivalent checks
