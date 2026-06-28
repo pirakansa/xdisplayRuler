@@ -27,6 +27,23 @@ focused: none
 top: none
 ```
 
+The explicit snapshot command is equivalent:
+
+```bash
+cargo run -- snapshot --backend in-memory
+```
+
+## Watch Snapshots
+
+Watch mode repeatedly refreshes the selected backend and prints a snapshot after
+each refresh:
+
+```bash
+cargo run -- watch --iterations 3 --interval-ms 1000
+```
+
+Omit `--iterations` to keep watching until the process is stopped.
+
 ## Command Help
 
 ```bash

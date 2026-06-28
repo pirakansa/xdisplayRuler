@@ -10,7 +10,7 @@ project evolves. Code and passing tests are the source of truth.
 - Monitor flow that polls a backend and applies events to display state
 - Display output connection, disconnection, geometry, and primary-output state
 - Window mapping, unmapping, geometry, stacking order, and focus state
-- CLI snapshot, help, version, and unknown-argument handling
+- CLI snapshot, watch, backend selection, help, version, and usage-error handling
 
 ## Out of Scope
 

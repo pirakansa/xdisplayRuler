@@ -26,6 +26,12 @@ Print the current in-memory snapshot:
 vorbere run run
 ```
 
+Run bounded watch mode during development:
+
+```bash
+cargo run -- watch --iterations 3 --interval-ms 1000
+```
+
 ## Common Commands
 
 - Run: `vorbere run run`
