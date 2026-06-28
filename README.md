@@ -1,7 +1,7 @@
-# codex-sandbox
+# displayRuler
 
-This repository is a minimal Rust template that prints Hello, world!.
-It keeps the project structure intentionally small so it can be used as a clean starting point.
+This repository provides a small Rust CLI that prints a terminal display ruler.
+It is useful when checking text width, alignment, and wrapping behavior in a terminal.
 
 ## Setup
 
@@ -17,19 +17,20 @@ vorbere run build
 ## Common Commands
 
 - Run: `vorbere run run`
+- Check: `vorbere run check`
 - Test: `vorbere run test`
-- Format: `vorbere run fmt`
-- Lint: `vorbere run clippy`
-- CI-equivalent checks: `vorbere run ci`
+- Build: `vorbere run build`
 
 ## Project Structure
 
-- `src/main.rs`: prints Hello, world!
+- `src/lib.rs`: ruler generation logic
+- `src/main.rs`: CLI entry point
 - `tests/`: smoke test for the compiled binary
 - `vorbere.yaml`: local development tasks
 
 ## Expected Output
 
 ```text
-Hello, world!
+0         1         2         3         4         5         6         7
+12345678901234567890123456789012345678901234567890123456789012345678901234567890
 ```

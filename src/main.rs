@@ -1,3 +1,5 @@
+use display_ruler::display_ruler;
+
 fn main() {
-    println!("Hello, world!");
+    println!("{}", display_ruler());
 }
