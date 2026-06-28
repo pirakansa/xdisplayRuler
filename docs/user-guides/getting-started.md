@@ -44,8 +44,8 @@ each refresh:
 xdisplay-ruler watch --iterations 3 --interval-ms 1000
 ```
 
-For the current X11 backend, watch mode refreshes the initial snapshot once and
-then reports no new events until X11 event subscription is implemented.
+With the X11 backend, watch mode prints the initial snapshot and then waits for
+RandR or root-window events before printing the next snapshot.
 
 Omit `--iterations` to keep watching until the process is stopped.
 

@@ -24,6 +24,10 @@ The current X11 backend collects an initial snapshot:
 - root-level window geometry
 - current input focus
 
+After the initial snapshot, the X11 backend subscribes to RANDR and root-window
+events. When a relevant event arrives, it refreshes the snapshot and emits a
+state reset followed by the current output and window events.
+
 The current X11 backend can also send low-level stacking requests:
 
 - raise a window with X11 `ConfigureWindow` stack mode `Above`
@@ -47,6 +51,6 @@ refreshes once. `watch` refreshes repeatedly, optionally bounded by
 
 ## Planned Backend
 
-The next X11/RandR step is event subscription. The backend should select RANDR
-and window events on the root window, wait for X11 events, and translate output,
-window, stacking, and focus changes into `DisplayEvent` values.
+The next X11/RandR step is richer event handling. The backend currently
+refreshes a complete snapshot after relevant events instead of deriving a small
+per-event delta.

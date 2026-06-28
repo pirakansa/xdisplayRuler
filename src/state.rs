@@ -35,6 +35,7 @@ impl DisplayState {
 
     pub fn apply(&mut self, event: DisplayEvent) {
         match event {
+            DisplayEvent::Reset => *self = Self::new(),
             DisplayEvent::OutputConnected(output) => self.upsert_output(output),
             DisplayEvent::OutputDisconnected { name } => self.mark_output_disconnected(&name),
             DisplayEvent::OutputGeometryChanged { name, geometry } => {

@@ -361,7 +361,15 @@ mod tests {
         let mut stderr = Vec::new();
 
         let exit = run(
-            ["watch", "--iterations", "2", "--interval-ms", "1"],
+            [
+                "watch",
+                "--backend",
+                "in-memory",
+                "--iterations",
+                "2",
+                "--interval-ms",
+                "1",
+            ],
             &mut stdout,
             &mut stderr,
         )

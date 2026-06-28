@@ -42,7 +42,7 @@ it from the stacking order and clears focus when that window was focused.
 ## Events
 
 `DisplayEvent` is the input boundary for future backends. Implemented events
-cover output connection changes, output geometry changes, window map and unmap,
-window geometry changes, window raises, and focus changes.
+cover full state reset, output connection changes, output geometry changes,
+window map and unmap, window geometry changes, window raises, and focus changes.
 
 Focus is accepted only for mapped windows.

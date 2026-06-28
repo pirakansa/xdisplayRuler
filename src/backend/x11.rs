@@ -4,7 +4,11 @@ use x11rb::{
     connection::Connection,
     protocol::{
         randr::{self, ConnectionExt as RandrConnectionExt, GetScreenResourcesCurrentReply},
-        xproto::{ConfigureWindowAux, ConnectionExt as XprotoConnection, MapState, StackMode},
+        xproto::{
+            ChangeWindowAttributesAux, ConfigureWindowAux, ConnectionExt as XprotoConnection,
+            EventMask, MapState, StackMode,
+        },
+        Event,
     },
     rust_connection::RustConnection,
 };
@@ -36,11 +40,13 @@ impl X11Backend {
             ));
         }
 
-        Ok(Self {
+        let backend = Self {
             connection,
             screen_index,
             initial_snapshot_pending: true,
-        })
+        };
+        backend.subscribe_events()?;
+        Ok(backend)
     }
 
     fn root_window(&self) -> u32 {
@@ -48,9 +54,35 @@ impl X11Backend {
     }
 
     fn snapshot_events(&self) -> io::Result<Vec<DisplayEvent>> {
-        let mut events = self.output_events()?;
+        let mut events = vec![DisplayEvent::Reset];
+        events.extend(self.output_events()?);
         events.extend(self.window_events()?);
         Ok(events)
+    }
+
+    fn subscribe_events(&self) -> io::Result<()> {
+        let root = self.root_window();
+        let randr_mask = randr::NotifyMask::SCREEN_CHANGE
+            | randr::NotifyMask::CRTC_CHANGE
+            | randr::NotifyMask::OUTPUT_CHANGE
+            | randr::NotifyMask::RESOURCE_CHANGE;
+        self.connection
+            .randr_select_input(root, randr_mask)
+            .map_err(to_io_error)?
+            .check()
+            .map_err(to_io_error)?;
+
+        let root_event_mask = EventMask::SUBSTRUCTURE_NOTIFY
+            | EventMask::STRUCTURE_NOTIFY
+            | EventMask::PROPERTY_CHANGE
+            | EventMask::FOCUS_CHANGE;
+        let attributes = ChangeWindowAttributesAux::new().event_mask(root_event_mask);
+        self.connection
+            .change_window_attributes(root, &attributes)
+            .map_err(to_io_error)?
+            .check()
+            .map_err(to_io_error)?;
+        self.connection.flush().map_err(to_io_error)
     }
 
     fn output_events(&self) -> io::Result<Vec<DisplayEvent>> {
@@ -220,6 +252,15 @@ impl X11Backend {
             .map_err(to_io_error)?;
         self.connection.flush().map_err(to_io_error)
     }
+
+    fn wait_for_relevant_event(&self) -> io::Result<()> {
+        loop {
+            let event = self.connection.wait_for_event().map_err(to_io_error)?;
+            if is_relevant_event(&event) {
+                return Ok(());
+            }
+        }
+    }
 }
 
 impl DisplayBackend for X11Backend {
@@ -229,12 +270,29 @@ impl DisplayBackend for X11Backend {
 
     fn poll_events(&mut self) -> io::Result<Vec<DisplayEvent>> {
         if !self.initial_snapshot_pending {
-            return Ok(Vec::new());
+            self.wait_for_relevant_event()?;
         }
 
         self.initial_snapshot_pending = false;
         self.snapshot_events()
     }
+}
+
+fn is_relevant_event(event: &Event) -> bool {
+    matches!(
+        event,
+        Event::RandrNotify(_)
+            | Event::RandrScreenChangeNotify(_)
+            | Event::ConfigureNotify(_)
+            | Event::CreateNotify(_)
+            | Event::DestroyNotify(_)
+            | Event::MapNotify(_)
+            | Event::UnmapNotify(_)
+            | Event::ReparentNotify(_)
+            | Event::PropertyNotify(_)
+            | Event::FocusIn(_)
+            | Event::FocusOut(_)
+    )
 }
 
 fn to_io_error(error: impl std::fmt::Display) -> io::Error {
