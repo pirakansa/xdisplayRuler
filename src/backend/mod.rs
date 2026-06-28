@@ -45,6 +45,16 @@ impl ConfiguredBackend {
             Self::X11(backend) => backend.lower_window(id),
         }
     }
+
+    pub fn place_window_fullscreen(&self, id: WindowId, output_name: &str) -> io::Result<()> {
+        match self {
+            Self::InMemory(_) => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "in-memory backend cannot place X11 windows",
+            )),
+            Self::X11(backend) => backend.place_window_fullscreen(id, output_name),
+        }
+    }
 }
 
 impl DisplayBackend for ConfiguredBackend {

@@ -10,6 +10,7 @@ project evolves. Code and passing tests are the source of truth.
 - Monitor flow that polls a backend and applies events to display state
 - X11/RandR snapshot backend for outputs and root-level windows
 - X11/RandR and root-window event subscription for watch mode
+- X11 fullscreen placement command
 - X11 window raise and lower commands
 - Display output connection, disconnection, geometry, and primary-output state
 - Window mapping, unmapping, geometry, stacking order, and focus state
@@ -18,7 +19,7 @@ project evolves. Code and passing tests are the source of truth.
 ## Out of Scope
 
 - Display mode switching
-- Window move, resize, or focus commands
+- General window move, resize, or focus commands
 - Persistent configuration
 
 ## References

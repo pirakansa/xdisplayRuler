@@ -313,13 +313,30 @@ impl X11Backend {
         self.stack_window(id, StackMode::BELOW)
     }
 
-    fn stack_window(&self, id: WindowId, stack_mode: StackMode) -> io::Result<()> {
-        let window = u32::try_from(id.0).map_err(|_| {
+    pub fn place_window_fullscreen(&self, id: WindowId, output_name: &str) -> io::Result<()> {
+        let output = self
+            .output_snapshots()?
+            .into_iter()
+            .find(|output| output.name == output_name)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("output not found: {output_name}"),
+                )
+            })?;
+        let geometry = output.geometry.ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!("window id {id} does not fit in an X11 window id"),
+                format!("output is disconnected: {output_name}"),
             )
         })?;
+
+        self.configure_window_geometry(id, &geometry)?;
+        self.raise_window(id)
+    }
+
+    fn stack_window(&self, id: WindowId, stack_mode: StackMode) -> io::Result<()> {
+        let window = x11_window_id(id)?;
         let changes = ConfigureWindowAux::new().stack_mode(stack_mode);
 
         self.connection
@@ -330,6 +347,33 @@ impl X11Backend {
         self.connection.flush().map_err(to_io_error)
     }
 
+    fn configure_window_geometry(&self, id: WindowId, geometry: &Rect) -> io::Result<()> {
+        let window = x11_window_id(id)?;
+        let changes = ConfigureWindowAux::new()
+            .x(geometry.x)
+            .y(geometry.y)
+            .width(geometry.width)
+            .height(geometry.height);
+
+        self.connection
+            .configure_window(window, &changes)
+            .map_err(to_io_error)?
+            .check()
+            .map_err(to_io_error)?;
+        self.connection.flush().map_err(to_io_error)
+    }
+}
+
+fn x11_window_id(id: WindowId) -> io::Result<u32> {
+    u32::try_from(id.0).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("window id {id} does not fit in an X11 window id"),
+        )
+    })
+}
+
+impl X11Backend {
     fn wait_for_relevant_event(&self) -> io::Result<()> {
         loop {
             let event = self.connection.wait_for_event().map_err(to_io_error)?;
@@ -378,7 +422,7 @@ fn to_io_error(error: impl std::fmt::Display) -> io::Error {
 
 #[cfg(test)]
 mod tests {
-    use super::{X11OutputSnapshot, X11Snapshot, X11WindowSnapshot};
+    use super::{x11_window_id, X11OutputSnapshot, X11Snapshot, X11WindowSnapshot};
     use crate::{DisplayEvent, DisplayOutput, Rect, WindowId, WindowInfo};
 
     #[test]
@@ -443,5 +487,14 @@ mod tests {
                 name: "HDMI-2".to_string(),
             }
         );
+    }
+
+    #[test]
+    fn validates_x11_window_id_range() {
+        assert_eq!(
+            x11_window_id(WindowId(u64::from(u32::MAX))).expect("id should fit"),
+            u32::MAX
+        );
+        assert!(x11_window_id(WindowId(u64::from(u32::MAX) + 1)).is_err());
     }
 }

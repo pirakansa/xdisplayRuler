@@ -7,6 +7,7 @@ The binary is named `xdisplay-ruler`.
 - No arguments: run the default `snapshot` command with the X11 backend.
 - `snapshot`: print the current display snapshot once.
 - `watch`: keep refreshing and printing display snapshots.
+- `place`: move and resize an X11 window onto an output.
 - `raise`: raise an X11 window above its siblings.
 - `lower`: lower an X11 window below its siblings.
 - `--backend x11` or `--backend xorg`: select the X11/RandR backend.
@@ -15,8 +16,10 @@ The binary is named `xdisplay-ruler`.
 - `--iterations N`: stop `watch` mode after `N` snapshots. This is intended for
   tests, scripts, and diagnostics. The value must be a positive integer. When
   omitted, `watch` keeps running.
-- `--window ID`: select an X11 window ID for `raise` or `lower`. Hex values such
-  as `0x800003` and decimal values are accepted.
+- `--output NAME`: select a RandR output for `place`.
+- `--fullscreen`: place the selected window fullscreen on the selected output.
+- `--window ID`: select an X11 window ID for `place`, `raise`, or `lower`. Hex
+  values such as `0x800003` and decimal values are accepted.
 - `--help` or `-h`: print command help.
 - `--version` or `-V`: print the package version.
 - Any unsupported command, argument, backend, or option value: print an error to
@@ -46,6 +49,9 @@ The X11 backend requires a reachable Xorg server through the usual `DISPLAY`
 environment. It verifies that the server provides the RANDR extension before
 collecting a snapshot.
 
-`raise` and `lower` default to the X11 backend because they are real X11 window
-operations. Selecting `--backend in-memory` for those commands returns a usage
-error.
+`place`, `raise`, and `lower` default to the X11 backend because they are real
+X11 window operations. Selecting `--backend in-memory` for those commands
+returns a usage error.
+
+`place` currently requires `--fullscreen`. It uses the selected output geometry,
+configures the target window to that rectangle, and raises the window.

@@ -32,6 +32,8 @@ The current X11 backend can also send low-level stacking requests:
 
 - raise a window with X11 `ConfigureWindow` stack mode `Above`
 - lower a window with X11 `ConfigureWindow` stack mode `Below`
+- place a window fullscreen on a RandR output by configuring its X, Y, width,
+  and height to the selected output geometry, then raising it
 
 ## Monitor Flow
 

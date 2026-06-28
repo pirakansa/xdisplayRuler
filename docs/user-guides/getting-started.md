@@ -74,6 +74,24 @@ These commands use low-level X11 stacking requests. They do not require a window
 manager, but they require the target application window to accept normal X11
 configuration requests.
 
+## Place a Window
+
+Use the output names from an X11 snapshot:
+
+```bash
+xdisplay-ruler snapshot
+```
+
+Place a window fullscreen on an output:
+
+```bash
+xdisplay-ruler place --window 0x800003 --output HDMI-2 --fullscreen
+```
+
+The current `place` command supports fullscreen placement only. It moves and
+resizes the target window to the selected output geometry, then raises the
+window.
+
 ## Command Help
 
 ```bash

@@ -32,6 +32,12 @@ Raise a window from the X11 snapshot:
 xdisplay-ruler raise --window 0x800003
 ```
 
+Place a window fullscreen on an output:
+
+```bash
+xdisplay-ruler place --window 0x800003 --output HDMI-2 --fullscreen
+```
+
 ## Development Setup
 
 - Rust stable

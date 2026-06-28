@@ -8,6 +8,7 @@ xdisplay-ruler
 Usage:
   xdisplay-ruler [snapshot] [--backend x11]
   xdisplay-ruler watch [--backend x11] [--iterations N]
+  xdisplay-ruler place --window ID --output NAME --fullscreen [--backend x11]
   xdisplay-ruler raise --window ID [--backend x11]
   xdisplay-ruler lower --window ID [--backend x11]
   xdisplay-ruler --help
@@ -16,12 +17,15 @@ Usage:
 Commands:
   snapshot  Print one display-state snapshot. This is the default command.
   watch     Keep refreshing and printing display-state snapshots.
+  place     Place a window on an output.
   raise     Raise a window above its siblings.
   lower     Lower a window below its siblings.
 
 Options:
   --backend NAME      Backend to use. Supported: x11.
   --iterations N      Stop watch after N snapshots for tests and diagnostics.
+  --output NAME       X11 RandR output name, for example HDMI-2.
+  --fullscreen        Resize and move the window to fill the output.
   --window ID         X11 window ID as hex, for example 0x800003.
 ";
 
@@ -35,6 +39,7 @@ pub enum CliExit {
 enum Command {
     Snapshot,
     Watch,
+    Place,
     Raise,
     Lower,
 }
@@ -44,6 +49,8 @@ struct CliOptions {
     command: Command,
     backend_name: String,
     iterations: Option<usize>,
+    output_name: Option<String>,
+    fullscreen: bool,
     window_id: Option<WindowId>,
 }
 
@@ -53,6 +60,8 @@ impl Default for CliOptions {
             command: Command::Snapshot,
             backend_name: "x11".to_string(),
             iterations: None,
+            output_name: None,
+            fullscreen: false,
             window_id: None,
         }
     }
@@ -102,6 +111,7 @@ where
             handle_command_result(run_snapshot(&options.backend_name, stdout), stderr)
         }
         Command::Watch => handle_command_result(run_watch(options, stdout), stderr),
+        Command::Place => handle_command_result(run_place_command(options), stderr),
         Command::Raise => {
             handle_command_result(run_stack_command(options, StackCommand::Raise), stderr)
         }
@@ -123,6 +133,11 @@ fn parse_options(arguments: &[String]) -> Result<CliOptions, String> {
             }
             "watch" => {
                 options.command = Command::Watch;
+                index = 1;
+            }
+            "place" => {
+                options.command = Command::Place;
+                options.backend_name = "x11".to_string();
                 index = 1;
             }
             "raise" => {
@@ -150,6 +165,13 @@ fn parse_options(arguments: &[String]) -> Result<CliOptions, String> {
             "--iterations" => {
                 let value = next_value(arguments, &mut index, "--iterations")?;
                 options.iterations = Some(parse_non_zero_usize(value, "--iterations")?);
+            }
+            "--output" => {
+                let value = next_value(arguments, &mut index, "--output")?;
+                options.output_name = Some(value.to_string());
+            }
+            "--fullscreen" => {
+                options.fullscreen = true;
             }
             "--window" => {
                 let value = next_value(arguments, &mut index, "--window")?;
@@ -254,6 +276,24 @@ fn run_stack_command(options: CliOptions, command: StackCommand) -> Result<(), S
         StackCommand::Lower => backend.lower_window(window_id),
     }
     .map_err(|error| error.to_string())
+}
+
+fn run_place_command(options: CliOptions) -> Result<(), String> {
+    let window_id = options
+        .window_id
+        .ok_or_else(|| "--window is required".to_string())?;
+    let output_name = options
+        .output_name
+        .ok_or_else(|| "--output is required".to_string())?;
+
+    if !options.fullscreen {
+        return Err("--fullscreen is required for place".to_string());
+    }
+
+    let backend = build_backend(&options.backend_name)?;
+    backend
+        .place_window_fullscreen(window_id, &output_name)
+        .map_err(|error| error.to_string())
 }
 
 fn build_backend(name: &str) -> Result<ConfiguredBackend, String> {
@@ -383,6 +423,65 @@ mod tests {
         assert_eq!(
             String::from_utf8_lossy(&stderr),
             "in-memory backend cannot change X11 window stacking\ntry --help\n"
+        );
+    }
+
+    #[test]
+    fn requires_output_and_fullscreen_for_place() {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let exit = run(["place", "--window", "0x800003"], &mut stdout, &mut stderr)
+            .expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "--output is required\ntry --help\n"
+        );
+
+        stderr.clear();
+        let exit = run(
+            ["place", "--window", "0x800003", "--output", "HDMI-2"],
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "--fullscreen is required for place\ntry --help\n"
+        );
+    }
+
+    #[test]
+    fn rejects_place_for_in_memory_backend() {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let exit = run(
+            [
+                "place",
+                "--backend",
+                "in-memory",
+                "--window",
+                "0x800003",
+                "--output",
+                "HDMI-2",
+                "--fullscreen",
+            ],
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "in-memory backend cannot place X11 windows\ntry --help\n"
         );
     }
 
