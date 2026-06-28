@@ -3,9 +3,8 @@
 displayRuler is a Rust CLI foundation for tracking Xorg display and window
 state on kiosk-style Linux systems.
 
-The current build provides the core in-memory state engine, backend event
-boundary, monitor flow, and CLI snapshot output. The Xorg/XRandR event backend
-is not implemented yet.
+The current build provides the core state engine, backend event boundary,
+monitor flow, CLI snapshot output, and an X11/RandR snapshot backend.
 
 ## Quick Start
 
@@ -19,6 +18,18 @@ Run bounded watch mode:
 
 ```bash
 display-ruler watch --iterations 3 --interval-ms 1000
+```
+
+Read a snapshot from the running Xorg server:
+
+```bash
+display-ruler snapshot --backend x11
+```
+
+Raise a window from the X11 snapshot:
+
+```bash
+display-ruler raise --window 0x800003
 ```
 
 ## Development Setup

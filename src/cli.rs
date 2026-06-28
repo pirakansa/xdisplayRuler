@@ -4,25 +4,30 @@ use std::{
     time::Duration,
 };
 
-use crate::{BackendError, ConfiguredBackend, DisplayMonitor};
+use crate::{BackendError, ConfiguredBackend, DisplayMonitor, WindowId};
 
 const HELP: &str = "\
 display-ruler
 
 Usage:
-  display-ruler [snapshot] [--backend in-memory]
-  display-ruler watch [--backend in-memory] [--interval-ms MS] [--iterations N]
+  display-ruler [snapshot] [--backend in-memory|x11]
+  display-ruler watch [--backend in-memory|x11] [--interval-ms MS] [--iterations N]
+  display-ruler raise --window ID [--backend x11]
+  display-ruler lower --window ID [--backend x11]
   display-ruler --help
   display-ruler --version
 
 Commands:
   snapshot  Print one display-state snapshot. This is the default command.
   watch     Keep refreshing and printing display-state snapshots.
+  raise     Raise a window above its siblings.
+  lower     Lower a window below its siblings.
 
 Options:
-  --backend NAME      Backend to use. Supported: in-memory.
+  --backend NAME      Backend to use. Supported: in-memory, x11.
   --interval-ms MS    Delay between watch refreshes. Default: 1000.
   --iterations N      Stop watch mode after N refreshes.
+  --window ID         X11 window ID as hex, for example 0x800003.
 ";
 
 #[derive(Debug, Eq, PartialEq)]
@@ -35,6 +40,8 @@ pub enum CliExit {
 enum Command {
     Snapshot,
     Watch,
+    Raise,
+    Lower,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -43,6 +50,7 @@ struct CliOptions {
     backend_name: String,
     interval: Duration,
     iterations: Option<usize>,
+    window_id: Option<WindowId>,
 }
 
 impl Default for CliOptions {
@@ -52,6 +60,7 @@ impl Default for CliOptions {
             backend_name: "in-memory".to_string(),
             interval: Duration::from_millis(1_000),
             iterations: None,
+            window_id: None,
         }
     }
 }
@@ -100,6 +109,12 @@ where
             handle_command_result(run_snapshot(&options.backend_name, stdout), stderr)
         }
         Command::Watch => handle_command_result(run_watch(options, stdout), stderr),
+        Command::Raise => {
+            handle_command_result(run_stack_command(options, StackCommand::Raise), stderr)
+        }
+        Command::Lower => {
+            handle_command_result(run_stack_command(options, StackCommand::Lower), stderr)
+        }
     }
 }
 
@@ -115,6 +130,16 @@ fn parse_options(arguments: &[String]) -> Result<CliOptions, String> {
             }
             "watch" => {
                 options.command = Command::Watch;
+                index = 1;
+            }
+            "raise" => {
+                options.command = Command::Raise;
+                options.backend_name = "x11".to_string();
+                index = 1;
+            }
+            "lower" => {
+                options.command = Command::Lower;
+                options.backend_name = "x11".to_string();
                 index = 1;
             }
             _ if command.starts_with('-') => {}
@@ -138,6 +163,10 @@ fn parse_options(arguments: &[String]) -> Result<CliOptions, String> {
                 let value = next_value(arguments, &mut index, "--iterations")?;
                 options.iterations = Some(parse_non_zero_usize(value, "--iterations")?);
             }
+            "--window" => {
+                let value = next_value(arguments, &mut index, "--window")?;
+                options.window_id = Some(parse_window_id(value)?);
+            }
             argument => return Err(format!("unknown argument: {argument}")),
         }
 
@@ -145,6 +174,12 @@ fn parse_options(arguments: &[String]) -> Result<CliOptions, String> {
     }
 
     Ok(options)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StackCommand {
+    Raise,
+    Lower,
 }
 
 fn next_value<'a>(
@@ -190,6 +225,20 @@ fn parse_non_zero_usize(value: &str, option_name: &str) -> Result<usize, String>
     Ok(value)
 }
 
+fn parse_window_id(value: &str) -> Result<WindowId, String> {
+    let normalized = value.trim();
+    let parsed = normalized
+        .strip_prefix("0x")
+        .or_else(|| normalized.strip_prefix("0X"))
+        .map_or_else(
+            || normalized.parse::<u64>(),
+            |hex| u64::from_str_radix(hex, 16),
+        )
+        .map_err(|_| format!("--window must be an X11 window id, got: {value}"))?;
+
+    Ok(WindowId(parsed))
+}
+
 fn run_snapshot(backend_name: &str, stdout: &mut impl Write) -> Result<(), String> {
     let mut monitor = DisplayMonitor::new(build_backend(backend_name)?);
     monitor.refresh_once().map_err(|error| error.to_string())?;
@@ -218,6 +267,19 @@ fn run_watch(options: CliOptions, stdout: &mut impl Write) -> Result<(), String>
     }
 
     Ok(())
+}
+
+fn run_stack_command(options: CliOptions, command: StackCommand) -> Result<(), String> {
+    let window_id = options
+        .window_id
+        .ok_or_else(|| "--window is required".to_string())?;
+    let backend = build_backend(&options.backend_name)?;
+
+    match command {
+        StackCommand::Raise => backend.raise_window(window_id),
+        StackCommand::Lower => backend.lower_window(window_id),
+    }
+    .map_err(|error| error.to_string())
 }
 
 fn build_backend(name: &str) -> Result<ConfiguredBackend, String> {
@@ -278,20 +340,18 @@ mod tests {
     }
 
     #[test]
-    fn reports_unavailable_x11_backend() {
+    fn reports_unsupported_backend() {
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
 
-        let exit = run(["--backend", "x11"], &mut stdout, &mut stderr).expect("cli should run");
+        let exit =
+            run(["--backend", "unsupported"], &mut stdout, &mut stderr).expect("cli should run");
 
         assert_eq!(exit, CliExit::UsageError);
         assert!(stdout.is_empty());
         assert_eq!(
             String::from_utf8_lossy(&stderr),
-            concat!(
-                "x11 backend requires an X11 client implementation that is not available in this build\n",
-                "try --help\n"
-            )
+            "unsupported backend: unsupported\ntry --help\n"
         );
     }
 
@@ -314,6 +374,41 @@ mod tests {
                 .matches("display-ruler")
                 .count(),
             2
+        );
+    }
+
+    #[test]
+    fn requires_window_for_stack_commands() {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let exit = run(["raise"], &mut stdout, &mut stderr).expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "--window is required\ntry --help\n"
+        );
+    }
+
+    #[test]
+    fn rejects_stack_commands_for_in_memory_backend() {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let exit = run(
+            ["lower", "--backend", "in-memory", "--window", "0x800003"],
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "in-memory backend cannot change X11 window stacking\ntry --help\n"
         );
     }
 }

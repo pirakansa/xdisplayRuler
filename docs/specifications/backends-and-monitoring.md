@@ -10,12 +10,24 @@ Backends collect display events. The monitor applies those events to
 - `name()`: stable backend label for reports.
 - `poll_events()`: returns pending `DisplayEvent` values.
 
-The current implementation includes `InMemoryBackend`. It is used by the CLI and
-test suite, and drains its configured events the first time it is polled.
+The current implementation includes `InMemoryBackend`. It is used by the test
+suite and drains its configured events the first time it is polled.
 
-`X11Backend` is present as the future integration point. Its `connect()` method
-currently returns an unsupported error because no X11 client implementation is
-included in this build.
+`X11Backend` connects to the Xorg server through the pure Rust `x11rb` protocol
+client. It does not call the `xrandr` command and does not link to `libXrandr`.
+On connection, it verifies that the server exposes the RANDR extension.
+
+The current X11 backend collects an initial snapshot:
+
+- RANDR outputs and CRTC geometry
+- root-level viewable windows
+- root-level window geometry
+- current input focus
+
+The current X11 backend can also send low-level stacking requests:
+
+- raise a window with X11 `ConfigureWindow` stack mode `Above`
+- lower a window with X11 `ConfigureWindow` stack mode `Below`
 
 ## Monitor Flow
 
@@ -35,6 +47,6 @@ refreshes once. `watch` refreshes repeatedly, optionally bounded by
 
 ## Planned Backend
 
-The Xorg/XRandR backend should replace the current `X11Backend::connect()`
-placeholder and translate X11 output, window, stacking, and focus changes into
-`DisplayEvent` values.
+The next X11/RandR step is event subscription. The backend should select RANDR
+and window events on the root window, wait for X11 events, and translate output,
+window, stacking, and focus changes into `DisplayEvent` values.

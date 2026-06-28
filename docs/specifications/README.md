@@ -8,16 +8,17 @@ project evolves. Code and passing tests are the source of truth.
 - In-memory display state model
 - Backend event source boundary
 - Monitor flow that polls a backend and applies events to display state
+- X11/RandR snapshot backend for outputs and root-level windows
+- X11 window raise and lower commands
 - Display output connection, disconnection, geometry, and primary-output state
 - Window mapping, unmapping, geometry, stacking order, and focus state
 - CLI snapshot, watch, backend selection, help, version, and usage-error handling
 
 ## Out of Scope
 
-- Xorg server connection
-- XRandR event collection
-- X11 window tree inspection
+- XRandR event subscription
 - Display mode switching
+- Window move, resize, or focus commands
 - Persistent configuration
 
 ## References

@@ -1,7 +1,7 @@
 # Getting Started
 
-`display-ruler` currently starts without connecting to an Xorg server. It prints
-the in-memory display snapshot managed by the core state engine.
+`display-ruler` can print either the built-in in-memory snapshot or a snapshot
+read from a running Xorg server.
 
 ## Print a Snapshot
 
@@ -9,8 +9,7 @@ the in-memory display snapshot managed by the core state engine.
 display-ruler
 ```
 
-The current default snapshot is empty because the Xorg/XRandR event backend is
-not implemented yet:
+The current default snapshot uses the in-memory backend, so it starts empty:
 
 ```text
 display-ruler
@@ -27,6 +26,13 @@ The explicit snapshot command is equivalent:
 display-ruler snapshot --backend in-memory
 ```
 
+Use the X11 backend to read outputs and root-level windows from the running Xorg
+server:
+
+```bash
+display-ruler snapshot --backend x11
+```
+
 ## Watch Snapshots
 
 Watch mode repeatedly refreshes the selected backend and prints a snapshot after
@@ -36,7 +42,34 @@ each refresh:
 display-ruler watch --iterations 3 --interval-ms 1000
 ```
 
+For the current X11 backend, watch mode refreshes the initial snapshot once and
+then reports no new events until X11 event subscription is implemented.
+
 Omit `--iterations` to keep watching until the process is stopped.
+
+## Change Window Stacking
+
+Use the window IDs from an X11 snapshot:
+
+```bash
+display-ruler snapshot --backend x11
+```
+
+Raise a window above its siblings:
+
+```bash
+display-ruler raise --window 0x800003
+```
+
+Lower a window below its siblings:
+
+```bash
+display-ruler lower --window 0x800003
+```
+
+These commands use low-level X11 stacking requests. They do not require a window
+manager, but they require the target application window to accept normal X11
+configuration requests.
 
 ## Command Help
 

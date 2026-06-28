@@ -3,15 +3,15 @@ mod x11;
 
 use std::io;
 
-use crate::DisplayEvent;
+use crate::{DisplayEvent, WindowId};
 
 pub use memory::InMemoryBackend;
 pub use x11::X11Backend;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum ConfiguredBackend {
     InMemory(InMemoryBackend),
-    X11(X11Backend),
+    X11(Box<X11Backend>),
 }
 
 impl ConfiguredBackend {
@@ -19,9 +19,30 @@ impl ConfiguredBackend {
         match name {
             "in-memory" => Ok(Self::InMemory(InMemoryBackend::new())),
             "x11" | "xorg" => X11Backend::connect()
+                .map(Box::new)
                 .map(Self::X11)
                 .map_err(BackendError::Io),
             _ => Err(BackendError::UnsupportedName(name.to_string())),
+        }
+    }
+
+    pub fn raise_window(&self, id: WindowId) -> io::Result<()> {
+        match self {
+            Self::InMemory(_) => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "in-memory backend cannot change X11 window stacking",
+            )),
+            Self::X11(backend) => backend.raise_window(id),
+        }
+    }
+
+    pub fn lower_window(&self, id: WindowId) -> io::Result<()> {
+        match self {
+            Self::InMemory(_) => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "in-memory backend cannot change X11 window stacking",
+            )),
+            Self::X11(backend) => backend.lower_window(id),
         }
     }
 }
