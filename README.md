@@ -49,6 +49,8 @@ vorbere run build
 - Check: `vorbere run check`
 - Test: `vorbere run test`
 - Build: `vorbere run build`
+- Linux amd64 musl release: `vorbere run release-linux-amd64-musl`
+- Linux arm64 musl release: `vorbere run release-linux-arm64-musl`
 
 ## Documentation
 
