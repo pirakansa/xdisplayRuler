@@ -1,5 +1,5 @@
 [package]
-name = "display-ruler"
+name = "xdisplay-ruler"
 version = "0.1.0"
 edition = "2021"
 description = "CLI foundation for tracking Xorg display and window state"

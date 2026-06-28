@@ -1,6 +1,6 @@
-# displayRuler
+# xdisplayRuler
 
-displayRuler is a Rust CLI foundation for tracking Xorg display and window
+xdisplayRuler is a Rust CLI foundation for tracking Xorg display and window
 state on kiosk-style Linux systems.
 
 The current build provides the core state engine, backend event boundary,
@@ -11,25 +11,25 @@ monitor flow, CLI snapshot output, and an X11/RandR snapshot backend.
 Print the current in-memory snapshot with the released binary:
 
 ```bash
-display-ruler
+xdisplay-ruler
 ```
 
 Run bounded watch mode:
 
 ```bash
-display-ruler watch --iterations 3 --interval-ms 1000
+xdisplay-ruler watch --iterations 3 --interval-ms 1000
 ```
 
 Read a snapshot from the running Xorg server:
 
 ```bash
-display-ruler snapshot --backend x11
+xdisplay-ruler snapshot --backend x11
 ```
 
 Raise a window from the X11 snapshot:
 
 ```bash
-display-ruler raise --window 0x800003
+xdisplay-ruler raise --window 0x800003
 ```
 
 ## Development Setup

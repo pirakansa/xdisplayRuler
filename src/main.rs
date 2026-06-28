@@ -1,6 +1,6 @@
 use std::{env, io, process};
 
-use display_ruler::cli::{self, CliExit};
+use xdisplay_ruler::cli::{self, CliExit};
 
 fn main() {
     let mut stdout = io::stdout();
@@ -10,7 +10,7 @@ fn main() {
         Ok(CliExit::Success) => {}
         Ok(CliExit::UsageError) => process::exit(2),
         Err(error) => {
-            eprintln!("display-ruler: {error}");
+            eprintln!("xdisplay-ruler: {error}");
             process::exit(1);
         }
     }

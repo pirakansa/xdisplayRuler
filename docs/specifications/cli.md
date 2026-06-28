@@ -1,6 +1,6 @@
 # CLI
 
-The binary is named `display-ruler`.
+The binary is named `xdisplay-ruler`.
 
 ## Arguments
 
@@ -27,7 +27,7 @@ The binary is named `display-ruler`.
 The current default snapshot is:
 
 ```text
-display-ruler
+xdisplay-ruler
 backend: in-memory
 outputs: 0
 windows: 0

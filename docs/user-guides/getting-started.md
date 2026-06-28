@@ -1,18 +1,18 @@
 # Getting Started
 
-`display-ruler` can print either the built-in in-memory snapshot or a snapshot
+`xdisplay-ruler` can print either the built-in in-memory snapshot or a snapshot
 read from a running Xorg server.
 
 ## Print a Snapshot
 
 ```bash
-display-ruler
+xdisplay-ruler
 ```
 
 The current default snapshot uses the in-memory backend, so it starts empty:
 
 ```text
-display-ruler
+xdisplay-ruler
 backend: in-memory
 outputs: 0
 windows: 0
@@ -23,14 +23,14 @@ top: none
 The explicit snapshot command is equivalent:
 
 ```bash
-display-ruler snapshot --backend in-memory
+xdisplay-ruler snapshot --backend in-memory
 ```
 
 Use the X11 backend to read outputs and root-level windows from the running Xorg
 server:
 
 ```bash
-display-ruler snapshot --backend x11
+xdisplay-ruler snapshot --backend x11
 ```
 
 ## Watch Snapshots
@@ -39,7 +39,7 @@ Watch mode repeatedly refreshes the selected backend and prints a snapshot after
 each refresh:
 
 ```bash
-display-ruler watch --iterations 3 --interval-ms 1000
+xdisplay-ruler watch --iterations 3 --interval-ms 1000
 ```
 
 For the current X11 backend, watch mode refreshes the initial snapshot once and
@@ -52,19 +52,19 @@ Omit `--iterations` to keep watching until the process is stopped.
 Use the window IDs from an X11 snapshot:
 
 ```bash
-display-ruler snapshot --backend x11
+xdisplay-ruler snapshot --backend x11
 ```
 
 Raise a window above its siblings:
 
 ```bash
-display-ruler raise --window 0x800003
+xdisplay-ruler raise --window 0x800003
 ```
 
 Lower a window below its siblings:
 
 ```bash
-display-ruler lower --window 0x800003
+xdisplay-ruler lower --window 0x800003
 ```
 
 These commands use low-level X11 stacking requests. They do not require a window
@@ -74,5 +74,5 @@ configuration requests.
 ## Command Help
 
 ```bash
-display-ruler --help
+xdisplay-ruler --help
 ```

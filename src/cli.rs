@@ -7,15 +7,15 @@ use std::{
 use crate::{BackendError, ConfiguredBackend, DisplayMonitor, WindowId};
 
 const HELP: &str = "\
-display-ruler
+xdisplay-ruler
 
 Usage:
-  display-ruler [snapshot] [--backend in-memory|x11]
-  display-ruler watch [--backend in-memory|x11] [--interval-ms MS] [--iterations N]
-  display-ruler raise --window ID [--backend x11]
-  display-ruler lower --window ID [--backend x11]
-  display-ruler --help
-  display-ruler --version
+  xdisplay-ruler [snapshot] [--backend in-memory|x11]
+  xdisplay-ruler watch [--backend in-memory|x11] [--interval-ms MS] [--iterations N]
+  xdisplay-ruler raise --window ID [--backend x11]
+  xdisplay-ruler lower --window ID [--backend x11]
+  xdisplay-ruler --help
+  xdisplay-ruler --version
 
 Commands:
   snapshot  Print one display-state snapshot. This is the default command.
@@ -371,7 +371,7 @@ mod tests {
         assert!(stderr.is_empty());
         assert_eq!(
             String::from_utf8_lossy(&stdout)
-                .matches("display-ruler")
+                .matches("xdisplay-ruler")
                 .count(),
             2
         );

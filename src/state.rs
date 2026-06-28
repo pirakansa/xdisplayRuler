@@ -66,7 +66,7 @@ impl DisplayState {
     }
 
     pub fn status_report_for_backend(&self, backend_name: &str) -> String {
-        let mut report = format!("display-ruler\nbackend: {backend_name}\n");
+        let mut report = format!("xdisplay-ruler\nbackend: {backend_name}\n");
         report.push_str(&format!("outputs: {}\n", self.outputs.len()));
         report.push_str(&self.output_report());
         report.push_str(&format!("windows: {}\n", self.windows.len()));
