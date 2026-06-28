@@ -3,9 +3,8 @@
 displayRuler is a Rust CLI foundation for tracking Xorg display and window
 state on kiosk-style Linux systems.
 
-The current build provides the core in-memory state engine for connected
-outputs, output geometry, mapped windows, stacking order, and focused windows.
-The Xorg/XRandR event backend is not implemented yet.
+The current build provides the core in-memory state engine and CLI snapshot
+output. The Xorg/XRandR event backend is not implemented yet.
 
 ## Setup
 
@@ -20,21 +19,10 @@ vorbere run build
 
 ## Quick Start
 
-Print the current built-in snapshot:
+Print the current in-memory snapshot:
 
 ```bash
 vorbere run run
-```
-
-Expected output for the current in-memory backend:
-
-```text
-display-ruler
-backend: in-memory
-outputs: 0
-windows: 0
-focused: none
-top: none
 ```
 
 ## Common Commands
@@ -44,9 +32,19 @@ top: none
 - Test: `vorbere run test`
 - Build: `vorbere run build`
 
+## Documentation
+
+- [User guides](docs/user-guides/README.md): practical command usage
+- [Specification references](docs/specifications/README.md): implemented CLI,
+  model, and state behavior
+
 ## Project Structure
 
-- `src/lib.rs`: display state model and event reducer
-- `src/main.rs`: CLI entry point
+- `src/cli.rs`: CLI argument handling
+- `src/lib.rs`: public module exports
+- `src/main.rs`: binary entry point
+- `src/models/`: display and window data types
+- `src/state.rs`: display state reducer and reporting
+- `docs/`: user guides and specification references
 - `tests/`: smoke tests for the compiled binary
 - `vorbere.yaml`: local development tasks

@@ -1,28 +1,17 @@
-use std::{env, process};
+use std::{env, io, process};
 
-use display_ruler::DisplayState;
-
-const HELP: &str = "\
-display-ruler
-
-Usage:
-  display-ruler [--help] [--version]
-
-The current build contains the display-state engine and prints the active
-in-memory snapshot. Xorg/XRandR event collection is a planned backend.
-";
+use display_ruler::cli::{self, CliExit};
 
 fn main() {
-    let mut args = env::args().skip(1);
+    let mut stdout = io::stdout();
+    let mut stderr = io::stderr();
 
-    match args.next().as_deref() {
-        None => print!("{}", DisplayState::new().status_report()),
-        Some("--help" | "-h") => print!("{HELP}"),
-        Some("--version" | "-V") => println!("{}", env!("CARGO_PKG_VERSION")),
-        Some(argument) => {
-            eprintln!("unknown argument: {argument}");
-            eprintln!("try --help");
-            process::exit(2);
+    match cli::run(env::args().skip(1), &mut stdout, &mut stderr) {
+        Ok(CliExit::Success) => {}
+        Ok(CliExit::UsageError) => process::exit(2),
+        Err(error) => {
+            eprintln!("display-ruler: {error}");
+            process::exit(1);
         }
     }
 }
