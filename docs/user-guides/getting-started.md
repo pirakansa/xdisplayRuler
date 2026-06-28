@@ -3,16 +3,10 @@
 `display-ruler` currently starts without connecting to an Xorg server. It prints
 the in-memory display snapshot managed by the core state engine.
 
-## Build
-
-```bash
-vorbere run build
-```
-
 ## Print a Snapshot
 
 ```bash
-vorbere run run
+display-ruler
 ```
 
 The current default snapshot is empty because the Xorg/XRandR event backend is
@@ -30,7 +24,7 @@ top: none
 The explicit snapshot command is equivalent:
 
 ```bash
-cargo run -- snapshot --backend in-memory
+display-ruler snapshot --backend in-memory
 ```
 
 ## Watch Snapshots
@@ -39,7 +33,7 @@ Watch mode repeatedly refreshes the selected backend and prints a snapshot after
 each refresh:
 
 ```bash
-cargo run -- watch --iterations 3 --interval-ms 1000
+display-ruler watch --iterations 3 --interval-ms 1000
 ```
 
 Omit `--iterations` to keep watching until the process is stopped.
@@ -47,5 +41,5 @@ Omit `--iterations` to keep watching until the process is stopped.
 ## Command Help
 
 ```bash
-cargo run -- --help
+display-ruler --help
 ```

@@ -7,7 +7,21 @@ The current build provides the core in-memory state engine, backend event
 boundary, monitor flow, and CLI snapshot output. The Xorg/XRandR event backend
 is not implemented yet.
 
-## Setup
+## Quick Start
+
+Print the current in-memory snapshot with the released binary:
+
+```bash
+display-ruler
+```
+
+Run bounded watch mode:
+
+```bash
+display-ruler watch --iterations 3 --interval-ms 1000
+```
+
+## Development Setup
 
 - Rust stable
 - `vorbere` for task shortcuts
@@ -18,21 +32,7 @@ Build the project once after cloning:
 vorbere run build
 ```
 
-## Quick Start
-
-Print the current in-memory snapshot:
-
-```bash
-vorbere run run
-```
-
-Run bounded watch mode during development:
-
-```bash
-cargo run -- watch --iterations 3 --interval-ms 1000
-```
-
-## Common Commands
+## Development Commands
 
 - Run: `vorbere run run`
 - Check: `vorbere run check`
