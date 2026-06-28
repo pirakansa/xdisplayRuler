@@ -419,4 +419,17 @@ mod tests {
             "in-memory backend cannot change X11 window stacking\ntry --help\n"
         );
     }
+
+    #[test]
+    fn parses_window_ids_as_hex_or_decimal() {
+        assert_eq!(
+            super::parse_window_id("0x800003"),
+            Ok(crate::WindowId(0x800003))
+        );
+        assert_eq!(
+            super::parse_window_id("8388611"),
+            Ok(crate::WindowId(0x800003))
+        );
+        assert!(super::parse_window_id("not-a-window").is_err());
+    }
 }

@@ -242,4 +242,27 @@ mod tests {
         assert_eq!(state.top_window(), Some(second));
         assert_eq!(state.focused_window(), None);
     }
+
+    #[test]
+    fn reset_clears_outputs_windows_stacking_and_focus() {
+        let mut state = DisplayState::new();
+
+        state.apply(DisplayEvent::OutputConnected(DisplayOutput::connected(
+            "HDMI-1",
+            Rect::new(0, 0, 1920, 1080),
+            true,
+        )));
+        state.apply(DisplayEvent::WindowMapped(WindowInfo::mapped(
+            WindowId(0x40),
+            Rect::new(0, 0, 800, 600),
+        )));
+        state.apply(DisplayEvent::FocusChanged(Some(WindowId(0x40))));
+
+        state.apply(DisplayEvent::Reset);
+
+        assert!(state.outputs().is_empty());
+        assert!(state.windows().is_empty());
+        assert!(state.stacking_order().is_empty());
+        assert_eq!(state.focused_window(), None);
+    }
 }

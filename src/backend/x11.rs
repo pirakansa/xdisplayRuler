@@ -15,6 +15,80 @@ use x11rb::{
 
 use crate::{DisplayBackend, DisplayEvent, DisplayOutput, Rect, WindowId, WindowInfo};
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct X11Snapshot {
+    outputs: Vec<X11OutputSnapshot>,
+    windows: Vec<X11WindowSnapshot>,
+    focused_window: Option<WindowId>,
+}
+
+impl X11Snapshot {
+    fn into_events(self) -> Vec<DisplayEvent> {
+        let mut events = vec![DisplayEvent::Reset];
+
+        events.extend(self.outputs.into_iter().map(X11OutputSnapshot::into_event));
+        events.extend(
+            self.windows
+                .into_iter()
+                .map(|window| DisplayEvent::WindowMapped(window.into_window_info())),
+        );
+        events.push(DisplayEvent::FocusChanged(self.focused_window));
+
+        events
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct X11OutputSnapshot {
+    name: String,
+    geometry: Option<Rect>,
+    primary: bool,
+}
+
+impl X11OutputSnapshot {
+    fn connected(name: impl Into<String>, geometry: Rect, primary: bool) -> Self {
+        Self {
+            name: name.into(),
+            geometry: Some(geometry),
+            primary,
+        }
+    }
+
+    fn disconnected(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            geometry: None,
+            primary: false,
+        }
+    }
+
+    fn into_event(self) -> DisplayEvent {
+        match self.geometry {
+            Some(geometry) => DisplayEvent::OutputConnected(DisplayOutput::connected(
+                self.name,
+                geometry,
+                self.primary,
+            )),
+            None => DisplayEvent::OutputDisconnected { name: self.name },
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct X11WindowSnapshot {
+    id: WindowId,
+    title: Option<String>,
+    geometry: Rect,
+}
+
+impl X11WindowSnapshot {
+    fn into_window_info(self) -> WindowInfo {
+        let mut window = WindowInfo::mapped(self.id, self.geometry);
+        window.title = self.title;
+        window
+    }
+}
+
 #[derive(Debug)]
 pub struct X11Backend {
     connection: RustConnection,
@@ -54,10 +128,15 @@ impl X11Backend {
     }
 
     fn snapshot_events(&self) -> io::Result<Vec<DisplayEvent>> {
-        let mut events = vec![DisplayEvent::Reset];
-        events.extend(self.output_events()?);
-        events.extend(self.window_events()?);
-        Ok(events)
+        Ok(self.snapshot()?.into_events())
+    }
+
+    fn snapshot(&self) -> io::Result<X11Snapshot> {
+        Ok(X11Snapshot {
+            outputs: self.output_snapshots()?,
+            windows: self.window_snapshots()?,
+            focused_window: self.focused_window()?,
+        })
     }
 
     fn subscribe_events(&self) -> io::Result<()> {
@@ -85,7 +164,7 @@ impl X11Backend {
         self.connection.flush().map_err(to_io_error)
     }
 
-    fn output_events(&self) -> io::Result<Vec<DisplayEvent>> {
+    fn output_snapshots(&self) -> io::Result<Vec<X11OutputSnapshot>> {
         let root = self.root_window();
         let resources = self
             .connection
@@ -97,15 +176,15 @@ impl X11Backend {
         resources
             .outputs
             .iter()
-            .map(|output| self.output_event(&resources, *output))
+            .map(|output| self.output_snapshot(&resources, *output))
             .collect()
     }
 
-    fn output_event(
+    fn output_snapshot(
         &self,
         resources: &GetScreenResourcesCurrentReply,
         output: randr::Output,
-    ) -> io::Result<DisplayEvent> {
+    ) -> io::Result<X11OutputSnapshot> {
         let info = self
             .connection
             .randr_get_output_info(output, resources.config_timestamp)
@@ -115,7 +194,7 @@ impl X11Backend {
         let name = String::from_utf8_lossy(&info.name).into_owned();
 
         if info.connection != randr::Connection::CONNECTED || info.crtc == 0 {
-            return Ok(DisplayEvent::OutputDisconnected { name });
+            return Ok(X11OutputSnapshot::disconnected(name));
         }
 
         let crtc = self
@@ -131,12 +210,10 @@ impl X11Backend {
             u32::from(crtc.height),
         );
 
-        Ok(DisplayEvent::OutputConnected(DisplayOutput::connected(
-            name, geometry, false,
-        )))
+        Ok(X11OutputSnapshot::connected(name, geometry, false))
     }
 
-    fn window_events(&self) -> io::Result<Vec<DisplayEvent>> {
+    fn window_snapshots(&self) -> io::Result<Vec<X11WindowSnapshot>> {
         let root = self.root_window();
         let tree = self
             .connection
@@ -144,7 +221,7 @@ impl X11Backend {
             .map_err(to_io_error)?
             .reply()
             .map_err(to_io_error)?;
-        let mut events = Vec::new();
+        let mut windows = Vec::new();
 
         for window in tree.children {
             let attributes = match self
@@ -169,32 +246,32 @@ impl X11Backend {
                 Ok(geometry) => geometry,
                 Err(_) => continue,
             };
-            let mut window_info = WindowInfo::mapped(
-                WindowId(u64::from(window)),
-                Rect::new(
+            windows.push(X11WindowSnapshot {
+                id: WindowId(u64::from(window)),
+                title: self.window_title(window)?,
+                geometry: Rect::new(
                     i32::from(geometry.x),
                     i32::from(geometry.y),
                     u32::from(geometry.width),
                     u32::from(geometry.height),
                 ),
-            );
-            window_info.title = self.window_title(window)?;
-
-            events.push(DisplayEvent::WindowMapped(window_info));
+            });
         }
 
+        Ok(windows)
+    }
+
+    fn focused_window(&self) -> io::Result<Option<WindowId>> {
         if let Ok(focus) = self
             .connection
             .get_input_focus()
             .map_err(to_io_error)?
             .reply()
         {
-            events.push(DisplayEvent::FocusChanged(Some(WindowId(u64::from(
-                focus.focus,
-            )))));
+            return Ok(Some(WindowId(u64::from(focus.focus))));
         }
 
-        Ok(events)
+        Ok(None)
     }
 
     fn window_title(&self, window: u32) -> io::Result<Option<String>> {
@@ -297,4 +374,74 @@ fn is_relevant_event(event: &Event) -> bool {
 
 fn to_io_error(error: impl std::fmt::Display) -> io::Error {
     io::Error::other(error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{X11OutputSnapshot, X11Snapshot, X11WindowSnapshot};
+    use crate::{DisplayEvent, DisplayOutput, Rect, WindowId, WindowInfo};
+
+    #[test]
+    fn converts_snapshot_to_reset_and_current_state_events() {
+        let snapshot = X11Snapshot {
+            outputs: vec![
+                X11OutputSnapshot::connected("HDMI-1", Rect::new(0, 0, 1920, 1080), true),
+                X11OutputSnapshot::disconnected("DP-1"),
+            ],
+            windows: vec![
+                X11WindowSnapshot {
+                    id: WindowId(0x10),
+                    title: Some("first".to_string()),
+                    geometry: Rect::new(0, 0, 800, 600),
+                },
+                X11WindowSnapshot {
+                    id: WindowId(0x20),
+                    title: None,
+                    geometry: Rect::new(800, 0, 640, 480),
+                },
+            ],
+            focused_window: Some(WindowId(0x20)),
+        };
+
+        let events = snapshot.into_events();
+
+        assert_eq!(events[0], DisplayEvent::Reset);
+        assert_eq!(
+            events[1],
+            DisplayEvent::OutputConnected(DisplayOutput::connected(
+                "HDMI-1",
+                Rect::new(0, 0, 1920, 1080),
+                true,
+            ))
+        );
+        assert_eq!(
+            events[2],
+            DisplayEvent::OutputDisconnected {
+                name: "DP-1".to_string(),
+            }
+        );
+        assert_eq!(
+            events[3],
+            DisplayEvent::WindowMapped(WindowInfo {
+                id: WindowId(0x10),
+                title: Some("first".to_string()),
+                app_id: None,
+                geometry: Rect::new(0, 0, 800, 600),
+                mapped: true,
+            })
+        );
+        assert_eq!(events[5], DisplayEvent::FocusChanged(Some(WindowId(0x20))));
+    }
+
+    #[test]
+    fn disconnected_outputs_ignore_primary_flag() {
+        let event = X11OutputSnapshot::disconnected("HDMI-2").into_event();
+
+        assert_eq!(
+            event,
+            DisplayEvent::OutputDisconnected {
+                name: "HDMI-2".to_string(),
+            }
+        );
+    }
 }
