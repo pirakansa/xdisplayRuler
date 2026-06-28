@@ -14,7 +14,8 @@ use x11rb::{
 };
 
 use crate::{
-    DisplayBackend, DisplayEvent, DisplayOutput, Rect, WindowGeometryChange, WindowId, WindowInfo,
+    DisplayBackend, DisplayEvent, DisplayOutput, OutputMode, OutputModeSelection, Rect,
+    WindowGeometryChange, WindowId, WindowInfo,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -88,6 +89,28 @@ impl X11WindowSnapshot {
         let mut window = WindowInfo::mapped(self.id, self.geometry);
         window.title = self.title;
         window
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct X11ModeInfo {
+    id: randr::Mode,
+    name: String,
+    width: u16,
+    height: u16,
+    refresh_millihertz: Option<u32>,
+}
+
+impl X11ModeInfo {
+    fn public_mode(self, preferred: bool, current: bool) -> OutputMode {
+        OutputMode {
+            name: self.name,
+            width: self.width,
+            height: self.height,
+            refresh_millihertz: self.refresh_millihertz,
+            preferred,
+            current,
+        }
     }
 }
 
@@ -182,6 +205,14 @@ impl X11Backend {
             .collect()
     }
 
+    fn screen_resources(&self) -> io::Result<GetScreenResourcesCurrentReply> {
+        self.connection
+            .randr_get_screen_resources_current(self.root_window())
+            .map_err(to_io_error)?
+            .reply()
+            .map_err(to_io_error)
+    }
+
     fn output_snapshot(
         &self,
         resources: &GetScreenResourcesCurrentReply,
@@ -213,6 +244,31 @@ impl X11Backend {
         );
 
         Ok(X11OutputSnapshot::connected(name, geometry, false))
+    }
+
+    fn output_by_name(
+        &self,
+        resources: &GetScreenResourcesCurrentReply,
+        output_name: &str,
+    ) -> io::Result<(randr::Output, randr::GetOutputInfoReply)> {
+        for output in &resources.outputs {
+            let info = self
+                .connection
+                .randr_get_output_info(*output, resources.config_timestamp)
+                .map_err(to_io_error)?
+                .reply()
+                .map_err(to_io_error)?;
+            let name = String::from_utf8_lossy(&info.name);
+
+            if name == output_name {
+                return Ok((*output, info));
+            }
+        }
+
+        Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("output not found: {output_name}"),
+        ))
     }
 
     fn window_snapshots(&self) -> io::Result<Vec<X11WindowSnapshot>> {
@@ -374,6 +430,142 @@ impl X11Backend {
         self.connection.flush().map_err(to_io_error)
     }
 
+    pub fn output_modes(&self, output_name: &str) -> io::Result<Vec<OutputMode>> {
+        let resources = self.screen_resources()?;
+        let (_, output) = self.output_by_name(&resources, output_name)?;
+        ensure_connected_output(output_name, &output)?;
+        let current_mode = self.current_output_mode(&resources, &output)?;
+        let mode_infos = mode_infos(&resources);
+
+        output
+            .modes
+            .iter()
+            .enumerate()
+            .map(|(index, mode)| {
+                let info = mode_infos
+                    .iter()
+                    .find(|info| info.id == *mode)
+                    .ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("mode id {mode} was not present in screen resources"),
+                        )
+                    })?
+                    .clone();
+                Ok(info.public_mode(
+                    index < usize::from(output.num_preferred),
+                    current_mode == *mode,
+                ))
+            })
+            .collect()
+    }
+
+    pub fn set_output_mode(
+        &self,
+        output_name: &str,
+        selection: &OutputModeSelection,
+    ) -> io::Result<()> {
+        let resources = self.screen_resources()?;
+        let (output_id, output) = self.output_by_name(&resources, output_name)?;
+        ensure_connected_output(output_name, &output)?;
+
+        if output.crtc == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("output has no active CRTC: {output_name}"),
+            ));
+        }
+
+        let selected_mode = self.select_output_mode(&resources, &output, selection)?;
+        let crtc = self
+            .connection
+            .randr_get_crtc_info(output.crtc, resources.config_timestamp)
+            .map_err(to_io_error)?
+            .reply()
+            .map_err(to_io_error)?;
+        let outputs = if crtc.outputs.is_empty() {
+            vec![output_id]
+        } else {
+            crtc.outputs
+        };
+        let reply = self
+            .connection
+            .randr_set_crtc_config(
+                output.crtc,
+                0,
+                resources.config_timestamp,
+                crtc.x,
+                crtc.y,
+                selected_mode.id,
+                crtc.rotation,
+                &outputs,
+            )
+            .map_err(to_io_error)?
+            .reply()
+            .map_err(to_io_error)?;
+
+        if reply.status != randr::SetConfig::SUCCESS {
+            return Err(io::Error::other(format!(
+                "RandR set CRTC config failed: {}",
+                set_config_status_label(reply.status)
+            )));
+        }
+
+        self.connection.flush().map_err(to_io_error)
+    }
+
+    fn current_output_mode(
+        &self,
+        resources: &GetScreenResourcesCurrentReply,
+        output: &randr::GetOutputInfoReply,
+    ) -> io::Result<randr::Mode> {
+        if output.crtc == 0 {
+            return Ok(0);
+        }
+
+        Ok(self
+            .connection
+            .randr_get_crtc_info(output.crtc, resources.config_timestamp)
+            .map_err(to_io_error)?
+            .reply()
+            .map_err(to_io_error)?
+            .mode)
+    }
+
+    fn select_output_mode(
+        &self,
+        resources: &GetScreenResourcesCurrentReply,
+        output: &randr::GetOutputInfoReply,
+        selection: &OutputModeSelection,
+    ) -> io::Result<X11ModeInfo> {
+        let mode_infos = mode_infos(resources);
+        let mut candidates = output
+            .modes
+            .iter()
+            .filter_map(|mode| mode_infos.iter().find(|info| info.id == *mode))
+            .filter(|mode| mode.width == selection.width && mode.height == selection.height)
+            .filter(|mode| refresh_matches(mode.refresh_millihertz, selection.refresh_millihertz))
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if candidates.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                mode_not_found_message(selection),
+            ));
+        }
+
+        if let Some(target_rate) = selection.refresh_millihertz {
+            candidates.sort_by_key(|mode| {
+                mode.refresh_millihertz
+                    .map(|rate| rate.abs_diff(target_rate))
+                    .unwrap_or(u32::MAX)
+            });
+        }
+
+        Ok(candidates.remove(0))
+    }
+
     fn stack_window(&self, id: WindowId, stack_mode: StackMode) -> io::Result<()> {
         let window = x11_window_id(id)?;
         let changes = ConfigureWindowAux::new().stack_mode(stack_mode);
@@ -400,6 +592,110 @@ impl X11Backend {
             .check()
             .map_err(to_io_error)?;
         self.connection.flush().map_err(to_io_error)
+    }
+}
+
+fn ensure_connected_output(
+    output_name: &str,
+    output: &randr::GetOutputInfoReply,
+) -> io::Result<()> {
+    if output.connection != randr::Connection::CONNECTED {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("output is disconnected: {output_name}"),
+        ));
+    }
+
+    Ok(())
+}
+
+fn mode_infos(resources: &GetScreenResourcesCurrentReply) -> Vec<X11ModeInfo> {
+    let mut name_offset = 0;
+
+    resources
+        .modes
+        .iter()
+        .map(|mode| {
+            let name_len = usize::from(mode.name_len);
+            let name_end = name_offset + name_len;
+            let name = resources
+                .names
+                .get(name_offset..name_end)
+                .map(|name| String::from_utf8_lossy(name).into_owned())
+                .unwrap_or_default();
+            name_offset = name_end;
+
+            X11ModeInfo {
+                id: mode.id,
+                name,
+                width: mode.width,
+                height: mode.height,
+                refresh_millihertz: refresh_millihertz(mode),
+            }
+        })
+        .collect()
+}
+
+fn refresh_millihertz(mode: &randr::ModeInfo) -> Option<u32> {
+    if mode.dot_clock == 0 || mode.htotal == 0 || mode.vtotal == 0 {
+        return None;
+    }
+
+    let mut refresh =
+        u64::from(mode.dot_clock) * 1000 / (u64::from(mode.htotal) * u64::from(mode.vtotal));
+
+    if (mode.mode_flags & randr::ModeFlag::INTERLACE) == randr::ModeFlag::INTERLACE {
+        refresh *= 2;
+    }
+    if (mode.mode_flags & randr::ModeFlag::DOUBLE_SCAN) == randr::ModeFlag::DOUBLE_SCAN {
+        refresh /= 2;
+    }
+
+    u32::try_from(refresh).ok()
+}
+
+fn refresh_matches(actual: Option<u32>, expected: Option<u32>) -> bool {
+    match (actual, expected) {
+        (_, None) => true,
+        (Some(actual), Some(expected)) => actual.abs_diff(expected) <= 500,
+        (None, Some(_)) => false,
+    }
+}
+
+fn mode_not_found_message(selection: &OutputModeSelection) -> String {
+    let rate = selection
+        .refresh_millihertz
+        .map(|rate| format!(" at {}", format_refresh_millihertz(rate)))
+        .unwrap_or_default();
+
+    format!(
+        "output mode not found: {}x{}{}",
+        selection.width, selection.height, rate
+    )
+}
+
+fn format_refresh_millihertz(refresh_millihertz: u32) -> String {
+    let hz = refresh_millihertz / 1000;
+    let fraction = refresh_millihertz % 1000;
+
+    if fraction == 0 {
+        format!("{hz}Hz")
+    } else {
+        let mut fraction = format!("{fraction:03}");
+        while fraction.ends_with('0') {
+            fraction.pop();
+        }
+        format!("{hz}.{fraction}Hz")
+    }
+}
+
+fn set_config_status_label(status: randr::SetConfig) -> &'static str {
+    match status {
+        randr::SetConfig::SUCCESS => "success",
+        randr::SetConfig::INVALID_CONFIG_TIME => "invalid config time",
+        randr::SetConfig::INVALID_TIME => "invalid time",
+        randr::SetConfig::FAILED => "failed",
+        _ => "unknown",
     }
 }
 
@@ -478,9 +774,11 @@ fn to_io_error(error: impl std::fmt::Display) -> io::Error {
 #[cfg(test)]
 mod tests {
     use super::{
-        text_property_value, x11_window_id, X11OutputSnapshot, X11Snapshot, X11WindowSnapshot,
+        mode_infos, refresh_millihertz, text_property_value, x11_window_id, X11OutputSnapshot,
+        X11Snapshot, X11WindowSnapshot,
     };
     use crate::{DisplayEvent, DisplayOutput, Rect, WindowId, WindowInfo};
+    use x11rb::protocol::randr::{GetScreenResourcesCurrentReply, ModeFlag, ModeInfo};
 
     #[test]
     fn converts_snapshot_to_reset_and_current_state_events() {
@@ -567,5 +865,92 @@ mod tests {
         );
         assert_eq!(text_property_value(b""), None);
         assert_eq!(text_property_value(b"\0\0"), None);
+    }
+
+    #[test]
+    fn extracts_mode_names_and_refresh_rates() {
+        let resources = GetScreenResourcesCurrentReply {
+            sequence: 0,
+            length: 0,
+            timestamp: 0,
+            config_timestamp: 0,
+            crtcs: Vec::new(),
+            outputs: Vec::new(),
+            modes: vec![
+                test_mode(TestMode {
+                    id: 1,
+                    width: 1920,
+                    height: 1080,
+                    dot_clock: 148_500_000,
+                    htotal: 2200,
+                    vtotal: 1125,
+                    mode_flags: ModeFlag::default(),
+                    name_len: 9,
+                }),
+                test_mode(TestMode {
+                    id: 2,
+                    width: 1280,
+                    height: 720,
+                    dot_clock: 74_250_000,
+                    htotal: 1650,
+                    vtotal: 750,
+                    mode_flags: ModeFlag::INTERLACE,
+                    name_len: 8,
+                }),
+            ],
+            names: b"1920x10801280x720".to_vec(),
+        };
+
+        let modes = mode_infos(&resources);
+
+        assert_eq!(modes[0].name, "1920x1080");
+        assert_eq!(modes[0].refresh_millihertz, Some(60_000));
+        assert_eq!(modes[1].name, "1280x720");
+        assert_eq!(modes[1].refresh_millihertz, Some(120_000));
+    }
+
+    #[test]
+    fn calculates_double_scan_refresh_rate() {
+        let mode = test_mode(TestMode {
+            id: 1,
+            width: 320,
+            height: 240,
+            dot_clock: 25_175_000,
+            htotal: 800,
+            vtotal: 525,
+            mode_flags: ModeFlag::DOUBLE_SCAN,
+            name_len: 7,
+        });
+
+        assert_eq!(refresh_millihertz(&mode), Some(29_970));
+    }
+
+    struct TestMode {
+        id: u32,
+        width: u16,
+        height: u16,
+        dot_clock: u32,
+        htotal: u16,
+        vtotal: u16,
+        mode_flags: ModeFlag,
+        name_len: u16,
+    }
+
+    fn test_mode(spec: TestMode) -> ModeInfo {
+        ModeInfo {
+            id: spec.id,
+            width: spec.width,
+            height: spec.height,
+            dot_clock: spec.dot_clock,
+            hsync_start: 0,
+            hsync_end: 0,
+            htotal: spec.htotal,
+            hskew: 0,
+            vsync_start: 0,
+            vsync_end: 0,
+            vtotal: spec.vtotal,
+            name_len: spec.name_len,
+            mode_flags: spec.mode_flags,
+        }
     }
 }

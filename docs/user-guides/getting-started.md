@@ -50,6 +50,32 @@ RandR or root-window events before printing the next snapshot.
 Use `--iterations N` only when a test, script, or diagnostic check needs watch
 mode to stop after a fixed number of snapshots.
 
+## Change an Output Mode
+
+List the modes reported by RandR for an output:
+
+```bash
+xdisplay-ruler modes --output HDMI-2
+```
+
+The current mode is marked with `current`, and preferred modes are marked with
+`preferred`.
+
+Switch the output to one of the listed modes:
+
+```bash
+xdisplay-ruler mode --output HDMI-2 --width 1280 --height 720
+```
+
+When multiple modes share the same size, select a refresh rate:
+
+```bash
+xdisplay-ruler mode --output HDMI-2 --width 1920 --height 1080 --rate 60
+```
+
+`mode` selects from modes already reported by the Xorg RandR extension for the
+output. It does not create custom modelines.
+
 ## Change Window Stacking
 
 Use the window IDs from an X11 snapshot:

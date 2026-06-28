@@ -20,6 +20,13 @@ Watch display and window changes:
 xdisplay-ruler watch
 ```
 
+List output modes and switch to an existing mode:
+
+```bash
+xdisplay-ruler modes --output HDMI-2
+xdisplay-ruler mode --output HDMI-2 --width 1280 --height 720 --rate 60
+```
+
 The explicit X11 backend form is equivalent:
 
 ```bash

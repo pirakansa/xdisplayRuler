@@ -22,6 +22,23 @@ pub struct WindowGeometryChange {
     pub height: Option<u32>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OutputMode {
+    pub name: String,
+    pub width: u16,
+    pub height: u16,
+    pub refresh_millihertz: Option<u32>,
+    pub preferred: bool,
+    pub current: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OutputModeSelection {
+    pub width: u16,
+    pub height: u16,
+    pub refresh_millihertz: Option<u32>,
+}
+
 impl WindowGeometryChange {
     pub fn is_empty(&self) -> bool {
         self.x.is_none() && self.y.is_none() && self.width.is_none() && self.height.is_none()
@@ -77,6 +94,30 @@ impl ConfiguredBackend {
                 "in-memory backend cannot configure X11 windows",
             )),
             Self::X11(backend) => backend.configure_window(id, change),
+        }
+    }
+
+    pub fn output_modes(&self, output_name: &str) -> io::Result<Vec<OutputMode>> {
+        match self {
+            Self::InMemory(_) => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "in-memory backend cannot list X11 output modes",
+            )),
+            Self::X11(backend) => backend.output_modes(output_name),
+        }
+    }
+
+    pub fn set_output_mode(
+        &self,
+        output_name: &str,
+        selection: &OutputModeSelection,
+    ) -> io::Result<()> {
+        match self {
+            Self::InMemory(_) => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "in-memory backend cannot change X11 output modes",
+            )),
+            Self::X11(backend) => backend.set_output_mode(output_name, selection),
         }
     }
 }

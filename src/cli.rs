@@ -1,6 +1,9 @@
 use std::io::{self, Write};
 
-use crate::{BackendError, ConfiguredBackend, DisplayMonitor, WindowGeometryChange, WindowId};
+use crate::{
+    BackendError, ConfiguredBackend, DisplayMonitor, OutputMode, OutputModeSelection,
+    WindowGeometryChange, WindowId,
+};
 
 const HELP: &str = "\
 xdisplay-ruler
@@ -8,6 +11,8 @@ xdisplay-ruler
 Usage:
   xdisplay-ruler [snapshot] [--backend x11]
   xdisplay-ruler watch [--backend x11] [--iterations N]
+  xdisplay-ruler modes --output NAME [--backend x11]
+  xdisplay-ruler mode --output NAME --width N --height N [--rate HZ] [--backend x11]
   xdisplay-ruler place --window ID --output NAME --fullscreen [--backend x11]
   xdisplay-ruler configure --window ID [--x N] [--y N] [--width N] [--height N] [--backend x11]
   xdisplay-ruler raise --window ID [--backend x11]
@@ -18,6 +23,8 @@ Usage:
 Commands:
   snapshot  Print one display-state snapshot. This is the default command.
   watch     Keep refreshing and printing display-state snapshots.
+  modes     List available modes for an output.
+  mode      Change an output mode.
   place     Place a window on an output.
   configure Move or resize a window.
   raise     Raise a window above its siblings.
@@ -27,6 +34,7 @@ Options:
   --backend NAME      Backend to use. Supported: x11.
   --iterations N      Stop watch after N snapshots for tests and diagnostics.
   --output NAME       X11 RandR output name, for example HDMI-2.
+  --rate HZ           Refresh rate for mode, for example 60 or 59.94.
   --fullscreen        Resize and move the window to fill the output.
   --window ID         X11 window ID as hex, for example 0x800003.
   --x N               Window X position for configure.
@@ -45,6 +53,8 @@ pub enum CliExit {
 enum Command {
     Snapshot,
     Watch,
+    Modes,
+    Mode,
     Place,
     Configure,
     Raise,
@@ -57,6 +67,9 @@ struct CliOptions {
     backend_name: String,
     iterations: Option<usize>,
     output_name: Option<String>,
+    mode_width: Option<u16>,
+    mode_height: Option<u16>,
+    mode_refresh_millihertz: Option<u32>,
     fullscreen: bool,
     window_id: Option<WindowId>,
     geometry_change: WindowGeometryChange,
@@ -69,6 +82,9 @@ impl Default for CliOptions {
             backend_name: "x11".to_string(),
             iterations: None,
             output_name: None,
+            mode_width: None,
+            mode_height: None,
+            mode_refresh_millihertz: None,
             fullscreen: false,
             window_id: None,
             geometry_change: WindowGeometryChange::default(),
@@ -120,6 +136,8 @@ where
             handle_command_result(run_snapshot(&options.backend_name, stdout), stderr)
         }
         Command::Watch => handle_command_result(run_watch(options, stdout), stderr),
+        Command::Modes => handle_command_result(run_modes_command(options, stdout), stderr),
+        Command::Mode => handle_command_result(run_mode_command(options), stderr),
         Command::Place => handle_command_result(run_place_command(options), stderr),
         Command::Configure => handle_command_result(run_configure_command(options), stderr),
         Command::Raise => {
@@ -143,6 +161,16 @@ fn parse_options(arguments: &[String]) -> Result<CliOptions, String> {
             }
             "watch" => {
                 options.command = Command::Watch;
+                index = 1;
+            }
+            "modes" => {
+                options.command = Command::Modes;
+                options.backend_name = "x11".to_string();
+                index = 1;
+            }
+            "mode" => {
+                options.command = Command::Mode;
+                options.backend_name = "x11".to_string();
                 index = 1;
             }
             "place" => {
@@ -202,11 +230,19 @@ fn parse_options(arguments: &[String]) -> Result<CliOptions, String> {
             }
             "--width" => {
                 let value = next_value(arguments, &mut index, "--width")?;
-                options.geometry_change.width = Some(parse_positive_u32(value, "--width")?);
+                let width = parse_positive_u32(value, "--width")?;
+                options.geometry_change.width = Some(width);
+                options.mode_width = Some(parse_positive_u16(value, "--width")?);
             }
             "--height" => {
                 let value = next_value(arguments, &mut index, "--height")?;
-                options.geometry_change.height = Some(parse_positive_u32(value, "--height")?);
+                let height = parse_positive_u32(value, "--height")?;
+                options.geometry_change.height = Some(height);
+                options.mode_height = Some(parse_positive_u16(value, "--height")?);
+            }
+            "--rate" => {
+                let value = next_value(arguments, &mut index, "--rate")?;
+                options.mode_refresh_millihertz = Some(parse_refresh_millihertz(value)?);
             }
             argument => return Err(format!("unknown argument: {argument}")),
         }
@@ -272,6 +308,43 @@ fn parse_positive_u32(value: &str, option_name: &str) -> Result<u32, String> {
     Ok(value)
 }
 
+fn parse_positive_u16(value: &str, option_name: &str) -> Result<u16, String> {
+    let value = parse_positive_u32(value, option_name)?;
+
+    u16::try_from(value).map_err(|_| format!("{option_name} must be at most {}", u16::MAX))
+}
+
+fn parse_refresh_millihertz(value: &str) -> Result<u32, String> {
+    let (whole, fraction) = value
+        .split_once('.')
+        .map_or((value, ""), |(whole, fraction)| (whole, fraction));
+
+    if whole.is_empty()
+        || !whole.chars().all(|character| character.is_ascii_digit())
+        || !fraction.chars().all(|character| character.is_ascii_digit())
+        || fraction.len() > 3
+    {
+        return Err("--rate must be a positive refresh rate in Hz".to_string());
+    }
+
+    let whole = whole
+        .parse::<u32>()
+        .map_err(|_| "--rate must be a positive refresh rate in Hz".to_string())?;
+    let fraction = format!("{fraction:0<3}")
+        .parse::<u32>()
+        .map_err(|_| "--rate must be a positive refresh rate in Hz".to_string())?;
+    let rate = whole
+        .checked_mul(1000)
+        .and_then(|whole| whole.checked_add(fraction))
+        .ok_or_else(|| "--rate must be a positive refresh rate in Hz".to_string())?;
+
+    if rate == 0 {
+        return Err("--rate must be a positive refresh rate in Hz".to_string());
+    }
+
+    Ok(rate)
+}
+
 fn parse_window_id(value: &str) -> Result<WindowId, String> {
     let normalized = value.trim();
     let parsed = normalized
@@ -327,6 +400,38 @@ fn run_stack_command(options: CliOptions, command: StackCommand) -> Result<(), S
     .map_err(|error| error.to_string())
 }
 
+fn run_modes_command(options: CliOptions, stdout: &mut impl Write) -> Result<(), String> {
+    let output_name = options
+        .output_name
+        .ok_or_else(|| "--output is required".to_string())?;
+    let backend = build_backend(&options.backend_name)?;
+    let modes = backend
+        .output_modes(&output_name)
+        .map_err(|error| error.to_string())?;
+
+    write!(stdout, "{}", modes_report(&output_name, &modes)).map_err(|error| error.to_string())
+}
+
+fn run_mode_command(options: CliOptions) -> Result<(), String> {
+    let output_name = options
+        .output_name
+        .ok_or_else(|| "--output is required".to_string())?;
+    let selection = OutputModeSelection {
+        width: options
+            .mode_width
+            .ok_or_else(|| "--width is required".to_string())?,
+        height: options
+            .mode_height
+            .ok_or_else(|| "--height is required".to_string())?,
+        refresh_millihertz: options.mode_refresh_millihertz,
+    };
+    let backend = build_backend(&options.backend_name)?;
+
+    backend
+        .set_output_mode(&output_name, &selection)
+        .map_err(|error| error.to_string())
+}
+
 fn run_place_command(options: CliOptions) -> Result<(), String> {
     let window_id = options
         .window_id
@@ -360,6 +465,58 @@ fn run_configure_command(options: CliOptions) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
+fn modes_report(output_name: &str, modes: &[OutputMode]) -> String {
+    let mut report = format!(
+        "xdisplay-ruler\noutput: {output_name}\nmodes: {}\n",
+        modes.len()
+    );
+
+    for mode in modes {
+        let refresh = mode
+            .refresh_millihertz
+            .map(format_refresh_millihertz)
+            .unwrap_or_else(|| "unknown-rate".to_string());
+        let current = if mode.current { " current" } else { "" };
+        let preferred = if mode.preferred { " preferred" } else { "" };
+
+        report.push_str(&format!(
+            "- {}x{} {} name=\"{}\"{}{}\n",
+            mode.width,
+            mode.height,
+            refresh,
+            escape_report_value(&mode.name),
+            current,
+            preferred
+        ));
+    }
+
+    report
+}
+
+fn format_refresh_millihertz(refresh_millihertz: u32) -> String {
+    let hz = refresh_millihertz / 1000;
+    let fraction = refresh_millihertz % 1000;
+
+    if fraction == 0 {
+        format!("{hz}Hz")
+    } else {
+        let mut fraction = format!("{fraction:03}");
+        while fraction.ends_with('0') {
+            fraction.pop();
+        }
+        format!("{hz}.{fraction}Hz")
+    }
+}
+
+fn escape_report_value(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
+}
+
 fn build_backend(name: &str) -> Result<ConfiguredBackend, String> {
     ConfiguredBackend::from_name(name).map_err(|error| match error {
         BackendError::Io(error) => error.to_string(),
@@ -384,6 +541,7 @@ fn handle_command_result(
 #[cfg(test)]
 mod tests {
     use super::{run, CliExit};
+    use crate::OutputMode;
 
     #[test]
     fn reports_usage_errors_for_unknown_arguments() {
@@ -452,6 +610,187 @@ mod tests {
                 .matches("xdisplay-ruler")
                 .count(),
             2
+        );
+    }
+
+    #[test]
+    fn requires_output_for_modes_command() {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let exit = run(["modes"], &mut stdout, &mut stderr).expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "--output is required\ntry --help\n"
+        );
+    }
+
+    #[test]
+    fn requires_output_width_and_height_for_mode_command() {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let exit = run(["mode"], &mut stdout, &mut stderr).expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "--output is required\ntry --help\n"
+        );
+
+        stderr.clear();
+        let exit =
+            run(["mode", "--output", "HDMI-2"], &mut stdout, &mut stderr).expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "--width is required\ntry --help\n"
+        );
+
+        stderr.clear();
+        let exit = run(
+            ["mode", "--output", "HDMI-2", "--width", "1920"],
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "--height is required\ntry --help\n"
+        );
+    }
+
+    #[test]
+    fn validates_mode_values() {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let exit = run(
+            ["mode", "--output", "HDMI-2", "--width", "70000"],
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "--width must be at most 65535\ntry --help\n"
+        );
+
+        stderr.clear();
+        let exit = run(
+            [
+                "mode", "--output", "HDMI-2", "--width", "1920", "--height", "1080", "--rate",
+                "59.9400",
+            ],
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "--rate must be a positive refresh rate in Hz\ntry --help\n"
+        );
+    }
+
+    #[test]
+    fn rejects_mode_commands_for_in_memory_backend() {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let exit = run(
+            ["modes", "--backend", "in-memory", "--output", "HDMI-2"],
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "in-memory backend cannot list X11 output modes\ntry --help\n"
+        );
+
+        stderr.clear();
+        let exit = run(
+            [
+                "mode",
+                "--backend",
+                "in-memory",
+                "--output",
+                "HDMI-2",
+                "--width",
+                "1920",
+                "--height",
+                "1080",
+            ],
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "in-memory backend cannot change X11 output modes\ntry --help\n"
+        );
+    }
+
+    #[test]
+    fn parses_refresh_rates_as_millihertz() {
+        assert_eq!(super::parse_refresh_millihertz("60"), Ok(60_000));
+        assert_eq!(super::parse_refresh_millihertz("59.94"), Ok(59_940));
+        assert_eq!(super::parse_refresh_millihertz("59.940"), Ok(59_940));
+        assert!(super::parse_refresh_millihertz("0").is_err());
+        assert!(super::parse_refresh_millihertz("59.9400").is_err());
+        assert!(super::parse_refresh_millihertz("fast").is_err());
+    }
+
+    #[test]
+    fn renders_modes_report() {
+        let report = super::modes_report(
+            "HDMI-2",
+            &[
+                OutputMode {
+                    name: "1920x1080".to_string(),
+                    width: 1920,
+                    height: 1080,
+                    refresh_millihertz: Some(60_000),
+                    preferred: true,
+                    current: true,
+                },
+                OutputMode {
+                    name: "1280\"x720".to_string(),
+                    width: 1280,
+                    height: 720,
+                    refresh_millihertz: Some(59_940),
+                    preferred: false,
+                    current: false,
+                },
+            ],
+        );
+
+        assert_eq!(
+            report,
+            concat!(
+                "xdisplay-ruler\n",
+                "output: HDMI-2\n",
+                "modes: 2\n",
+                "- 1920x1080 60Hz name=\"1920x1080\" current preferred\n",
+                "- 1280x720 59.94Hz name=\"1280\\\"x720\"\n",
+            )
         );
     }
 

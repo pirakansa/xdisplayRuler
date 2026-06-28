@@ -29,7 +29,15 @@ After the initial snapshot, the X11 backend subscribes to RANDR and root-window
 events. When a relevant event arrives, it refreshes the snapshot and emits a
 state reset followed by the current output and window events.
 
-The current X11 backend can also send low-level stacking requests:
+The current X11 backend can list and switch output modes:
+
+- list modes reported by RandR for a selected output
+- mark the current CRTC mode and RandR preferred modes
+- switch to an existing output mode with RandR `SetCrtcConfig`
+- preserve the active CRTC position, rotation, and output list while switching
+  mode
+
+The current X11 backend can also send low-level window configuration requests:
 
 - raise a window with X11 `ConfigureWindow` stack mode `Above`
 - lower a window with X11 `ConfigureWindow` stack mode `Below`

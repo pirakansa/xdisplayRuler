@@ -7,6 +7,8 @@ The binary is named `xdisplay-ruler`.
 - No arguments: run the default `snapshot` command with the X11 backend.
 - `snapshot`: print the current display snapshot once.
 - `watch`: keep refreshing and printing display snapshots.
+- `modes`: list the modes RandR reports for an output.
+- `mode`: change an output to an existing RandR mode.
 - `place`: move and resize an X11 window onto an output.
 - `configure`: move or resize an X11 window with explicit geometry values.
 - `raise`: raise an X11 window above its siblings.
@@ -17,7 +19,10 @@ The binary is named `xdisplay-ruler`.
 - `--iterations N`: stop `watch` mode after `N` snapshots. This is intended for
   tests, scripts, and diagnostics. The value must be a positive integer. When
   omitted, `watch` keeps running.
-- `--output NAME`: select a RandR output for `place`.
+- `--output NAME`: select a RandR output for `modes`, `mode`, or `place`.
+- `--rate HZ`: select a refresh rate for `mode`. Values such as `60`, `59.94`,
+  and `59.940` are accepted. Values are interpreted as Hz and stored internally
+  as millihertz.
 - `--fullscreen`: place the selected window fullscreen on the selected output.
 - `--window ID`: select an X11 window ID for `place`, `configure`, `raise`, or
   `lower`. Hex values such as `0x800003` and decimal values are accepted.
@@ -52,6 +57,21 @@ The backend label is `x11` or `in-memory`.
 Window rows include `title="..."` when the backend reports a window title.
 Quotes, backslashes, and control characters are escaped in the title value.
 
+## Modes Output
+
+`modes --output NAME` prints:
+
+```text
+xdisplay-ruler
+output: HDMI-2
+modes: 2
+- 1920x1080 60Hz name="1920x1080" current preferred
+- 1280x720 59.94Hz name="1280x720"
+```
+
+Mode rows include width, height, refresh rate, RandR mode name, and optional
+`current` and `preferred` markers.
+
 ## Backend Selection
 
 The current build supports `x11`, `xorg`, and `in-memory`. `xorg` is an alias
@@ -61,9 +81,14 @@ The X11 backend requires a reachable Xorg server through the usual `DISPLAY`
 environment. It verifies that the server provides the RANDR extension before
 collecting a snapshot.
 
-`place`, `configure`, `raise`, and `lower` default to the X11 backend because
-they are real X11 window operations. Selecting `--backend in-memory` for those
-commands returns a usage error.
+`modes`, `mode`, `place`, `configure`, `raise`, and `lower` default to the X11
+backend because they are real X11 or RandR operations. Selecting
+`--backend in-memory` for those commands returns a usage error.
+
+`mode` requires `--output`, `--width`, and `--height`. `--rate` is optional. It
+selects from modes already reported by RandR for the output and sends
+`SetCrtcConfig` to the output's active CRTC while preserving the CRTC position,
+rotation, and output list. It does not create custom modelines.
 
 `place` currently requires `--fullscreen`. It uses the selected output geometry,
 configures the target window to that rectangle, and raises the window.
