@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 
-use crate::DisplayState;
+use crate::{DisplayMonitor, InMemoryBackend};
 
 const HELP: &str = "\
 display-ruler
@@ -31,7 +31,9 @@ where
 
     match arguments.next().as_ref().map(AsRef::as_ref) {
         None => {
-            write!(stdout, "{}", DisplayState::new().status_report())?;
+            let mut monitor = DisplayMonitor::new(InMemoryBackend::new());
+            monitor.refresh_once()?;
+            write!(stdout, "{}", monitor.status_report())?;
             Ok(CliExit::Success)
         }
         Some("--help" | "-h") => {

@@ -62,7 +62,11 @@ impl DisplayState {
     }
 
     pub fn status_report(&self) -> String {
-        let mut report = String::from("display-ruler\nbackend: in-memory\n");
+        self.status_report_for_backend("in-memory")
+    }
+
+    pub fn status_report_for_backend(&self, backend_name: &str) -> String {
+        let mut report = format!("display-ruler\nbackend: {backend_name}\n");
         report.push_str(&format!("outputs: {}\n", self.outputs.len()));
         report.push_str(&self.output_report());
         report.push_str(&format!("windows: {}\n", self.windows.len()));
