@@ -118,30 +118,11 @@ pub fn build_enforcement_plan(
         }
     }
 
-    match policy.unmanaged_windows {
-        UnmanagedWindowsPolicy::AllowAbove => {
-            if !managed_order_matches(state, &managed_windows) {
-                plan.operations
-                    .extend(managed_windows.windows(2).map(|pair| {
-                        let [(sibling, _), (id, selector)] = pair else {
-                            unreachable!("windows(2) returns exactly two items")
-                        };
-                        LayoutOperation::StackWindowAbove {
-                            id: *id,
-                            selector: selector.clone(),
-                            sibling: *sibling,
-                        }
-                    }));
-            }
-        }
-        UnmanagedWindowsPolicy::KeepBelowManaged => {
-            plan.operations.extend(
-                managed_windows
-                    .into_iter()
-                    .map(|(id, selector)| LayoutOperation::RaiseWindow { id, selector }),
-            );
-        }
-    }
+    plan.operations.extend(stack_policy_operations(
+        policy.unmanaged_windows,
+        state,
+        &managed_windows,
+    ));
 
     Ok(plan)
 }
@@ -374,6 +355,46 @@ fn managed_order_matches(
         .collect::<Vec<_>>();
 
     actual == desired
+}
+
+fn stack_policy_operations(
+    policy: UnmanagedWindowsPolicy,
+    state: &DisplayState,
+    managed_windows: &[(WindowId, WindowSelector)],
+) -> Vec<LayoutOperation> {
+    match policy {
+        UnmanagedWindowsPolicy::AllowAbove => allow_above_stack_operations(state, managed_windows),
+        UnmanagedWindowsPolicy::KeepBelowManaged => managed_windows
+            .iter()
+            .map(|(id, selector)| LayoutOperation::RaiseWindow {
+                id: *id,
+                selector: selector.clone(),
+            })
+            .collect(),
+    }
+}
+
+fn allow_above_stack_operations(
+    state: &DisplayState,
+    managed_windows: &[(WindowId, WindowSelector)],
+) -> Vec<LayoutOperation> {
+    if managed_order_matches(state, managed_windows) {
+        return Vec::new();
+    }
+
+    managed_windows
+        .windows(2)
+        .map(|pair| {
+            let [(sibling, _), (id, selector)] = pair else {
+                unreachable!("windows(2) returns exactly two items")
+            };
+            LayoutOperation::StackWindowAbove {
+                id: *id,
+                selector: selector.clone(),
+                sibling: *sibling,
+            }
+        })
+        .collect()
 }
 
 fn parse_window_id(value: &str) -> Result<WindowId, String> {
