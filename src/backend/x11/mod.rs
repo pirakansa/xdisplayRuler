@@ -3,8 +3,10 @@ use std::io;
 mod control;
 mod event;
 mod mode;
+mod output_control;
 mod snapshot;
 mod touch;
+mod touch_control;
 mod types;
 mod window;
 
