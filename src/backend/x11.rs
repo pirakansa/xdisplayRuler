@@ -10,7 +10,7 @@ use x11rb::{
         },
         xproto::{
             ChangeWindowAttributesAux, ConfigureWindowAux, ConnectionExt as XprotoConnection,
-            EventMask, MapState, PropMode, StackMode,
+            EventMask, MapState, PropMode, StackMode, Timestamp,
         },
         Event,
     },
@@ -129,6 +129,41 @@ impl X11ModeInfo {
             current,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ScreenSize {
+    width: u16,
+    height: u16,
+}
+
+impl ScreenSize {
+    fn expanded_to(self, other: Self) -> Self {
+        Self {
+            width: self.width.max(other.width),
+            height: self.height.max(other.height),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ScreenBounds {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct SelectedCrtcConfig {
+    crtc: randr::Crtc,
+    config_timestamp: Timestamp,
+    x: i16,
+    y: i16,
+    mode: randr::Mode,
+    rotation: randr::Rotation,
+    outputs: Vec<randr::Output>,
+    screen_size: ScreenSize,
 }
 
 #[derive(Debug)]
@@ -523,6 +558,58 @@ impl X11Backend {
         output_name: &str,
         selection: &OutputModeSelection,
     ) -> io::Result<OutputModeChange> {
+        let mut selected = self.selected_crtc_config(output_name, selection)?;
+        let current_screen_size = self.root_screen_size()?;
+        let pre_config_screen_size = current_screen_size.expanded_to(selected.screen_size);
+
+        if pre_config_screen_size != current_screen_size {
+            self.set_root_screen_size(pre_config_screen_size)?;
+            selected = self.selected_crtc_config(output_name, selection)?;
+        }
+
+        let reply = self
+            .connection
+            .randr_set_crtc_config(
+                selected.crtc,
+                0,
+                selected.config_timestamp,
+                selected.x,
+                selected.y,
+                selected.mode,
+                selected.rotation,
+                &selected.outputs,
+            )
+            .map_err(to_io_error)?
+            .reply()
+            .map_err(to_io_error)?;
+
+        if reply.status != randr::SetConfig::SUCCESS {
+            return Err(io::Error::other(format!(
+                "RandR set CRTC config failed: {}",
+                set_config_status_label(reply.status)
+            )));
+        }
+
+        if selected.screen_size != pre_config_screen_size {
+            self.set_root_screen_size(selected.screen_size)?;
+        }
+
+        let mut change = OutputModeChange::default();
+        if let Err(error) = self.remap_touch_devices_to_output(output_name, selected.rotation) {
+            change.warnings.push(format!(
+                "output mode changed, but touch remapping failed: {error}"
+            ));
+        }
+
+        self.connection.flush().map_err(to_io_error)?;
+        Ok(change)
+    }
+
+    fn selected_crtc_config(
+        &self,
+        output_name: &str,
+        selection: &OutputModeSelection,
+    ) -> io::Result<SelectedCrtcConfig> {
         let resources = self.screen_resources()?;
         let (output_id, output) = self.output_by_name(&resources, output_name)?;
         ensure_connected_output(output_name, &output)?;
@@ -547,38 +634,95 @@ impl X11Backend {
         } else {
             crtc.outputs
         };
-        let reply = self
+        let screen_size = self.selected_screen_size(
+            &resources,
+            output.crtc,
+            crtc.x,
+            crtc.y,
+            &selected_mode,
+            selected_rotation,
+        )?;
+
+        Ok(SelectedCrtcConfig {
+            crtc: output.crtc,
+            config_timestamp: resources.config_timestamp,
+            x: crtc.x,
+            y: crtc.y,
+            mode: selected_mode.id,
+            rotation: selected_rotation,
+            outputs,
+            screen_size,
+        })
+    }
+
+    fn selected_screen_size(
+        &self,
+        resources: &GetScreenResourcesCurrentReply,
+        selected_crtc: randr::Crtc,
+        selected_x: i16,
+        selected_y: i16,
+        selected_mode: &X11ModeInfo,
+        selected_rotation: randr::Rotation,
+    ) -> io::Result<ScreenSize> {
+        let mut bounds = Vec::new();
+
+        for crtc_id in &resources.crtcs {
+            let crtc = self
+                .connection
+                .randr_get_crtc_info(*crtc_id, resources.config_timestamp)
+                .map_err(to_io_error)?
+                .reply()
+                .map_err(to_io_error)?;
+
+            if *crtc_id == selected_crtc {
+                let (width, height) = transformed_mode_size(selected_mode, selected_rotation);
+                bounds.push(ScreenBounds {
+                    x: i32::from(selected_x),
+                    y: i32::from(selected_y),
+                    width: u32::from(width),
+                    height: u32::from(height),
+                });
+            } else if crtc.mode != 0 {
+                bounds.push(ScreenBounds {
+                    x: i32::from(crtc.x),
+                    y: i32::from(crtc.y),
+                    width: u32::from(crtc.width),
+                    height: u32::from(crtc.height),
+                });
+            }
+        }
+
+        screen_size_for_bounds(&bounds)
+    }
+
+    fn root_screen_size(&self) -> io::Result<ScreenSize> {
+        let root = self
             .connection
-            .randr_set_crtc_config(
-                output.crtc,
-                0,
-                resources.config_timestamp,
-                crtc.x,
-                crtc.y,
-                selected_mode.id,
-                selected_rotation,
-                &outputs,
-            )
+            .get_geometry(self.root_window())
             .map_err(to_io_error)?
             .reply()
             .map_err(to_io_error)?;
 
-        if reply.status != randr::SetConfig::SUCCESS {
-            return Err(io::Error::other(format!(
-                "RandR set CRTC config failed: {}",
-                set_config_status_label(reply.status)
-            )));
-        }
+        Ok(ScreenSize {
+            width: root.width,
+            height: root.height,
+        })
+    }
 
-        let mut change = OutputModeChange::default();
-        if let Err(error) = self.remap_touch_devices_to_output(output_name, selected_rotation) {
-            change.warnings.push(format!(
-                "output mode changed, but touch remapping failed: {error}"
-            ));
-        }
+    fn set_root_screen_size(&self, size: ScreenSize) -> io::Result<()> {
+        let screen = &self.connection.setup().roots[self.screen_index];
 
-        self.connection.flush().map_err(to_io_error)?;
-        Ok(change)
+        self.connection
+            .randr_set_screen_size(
+                self.root_window(),
+                size.width,
+                size.height,
+                u32::from(screen.width_in_millimeters),
+                u32::from(screen.height_in_millimeters),
+            )
+            .map_err(to_io_error)?
+            .check()
+            .map_err(to_io_error)
     }
 
     fn remap_touch_devices_to_output(
@@ -893,6 +1037,35 @@ fn basic_rotation(rotation: randr::Rotation) -> randr::Rotation {
     }
 }
 
+fn transformed_mode_size(mode: &X11ModeInfo, rotation: randr::Rotation) -> (u16, u16) {
+    match basic_rotation(rotation) {
+        randr::Rotation::ROTATE90 | randr::Rotation::ROTATE270 => (mode.height, mode.width),
+        _ => (mode.width, mode.height),
+    }
+}
+
+fn screen_size_for_bounds(bounds: &[ScreenBounds]) -> io::Result<ScreenSize> {
+    let mut width = 1_i64;
+    let mut height = 1_i64;
+
+    for bound in bounds {
+        width = width.max(i64::from(bound.x) + i64::from(bound.width));
+        height = height.max(i64::from(bound.y) + i64::from(bound.height));
+    }
+
+    if width <= 0 || height <= 0 || width > i64::from(u16::MAX) || height > i64::from(u16::MAX) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("required RandR screen size is out of range: {width}x{height}"),
+        ));
+    }
+
+    Ok(ScreenSize {
+        width: width as u16,
+        height: height as u16,
+    })
+}
+
 fn coordinate_transformation_matrix(
     root: &Rect,
     output: &Rect,
@@ -1063,8 +1236,9 @@ fn to_io_error(error: impl std::fmt::Display) -> io::Error {
 mod tests {
     use super::{
         coordinate_transformation_matrix, mode_infos, output_rotation_to_randr, refresh_millihertz,
-        selected_output_rotation, text_property_value, touch_device, window_class_value,
-        x11_window_id, X11OutputSnapshot, X11Snapshot, X11WindowSnapshot,
+        screen_size_for_bounds, selected_output_rotation, text_property_value, touch_device,
+        transformed_mode_size, window_class_value, x11_window_id, ScreenBounds, ScreenSize,
+        X11ModeInfo, X11OutputSnapshot, X11Snapshot, X11WindowSnapshot,
     };
     use crate::{DisplayEvent, DisplayOutput, OutputRotation, Rect, WindowId, WindowInfo};
     use x11rb::protocol::randr::{GetScreenResourcesCurrentReply, ModeFlag, ModeInfo, Rotation};
@@ -1296,6 +1470,81 @@ mod tests {
             Rotation::ROTATE270 | Rotation::REFLECT_X | Rotation::REFLECT_Y
         );
         assert_eq!(selected_output_rotation(current, None), current);
+    }
+
+    #[test]
+    fn rotated_modes_swap_screen_size_axes() {
+        let mode = X11ModeInfo {
+            id: 1,
+            name: "1920x1080".to_string(),
+            width: 1920,
+            height: 1080,
+            refresh_millihertz: Some(60_000),
+        };
+
+        assert_eq!(
+            transformed_mode_size(&mode, Rotation::ROTATE0),
+            (1920, 1080)
+        );
+        assert_eq!(
+            transformed_mode_size(&mode, Rotation::ROTATE90),
+            (1080, 1920)
+        );
+        assert_eq!(
+            transformed_mode_size(&mode, Rotation::ROTATE180),
+            (1920, 1080)
+        );
+        assert_eq!(
+            transformed_mode_size(&mode, Rotation::ROTATE270),
+            (1080, 1920)
+        );
+    }
+
+    #[test]
+    fn screen_size_covers_all_crtc_bounds() {
+        let size = screen_size_for_bounds(&[
+            ScreenBounds {
+                x: 0,
+                y: 0,
+                width: 1080,
+                height: 1920,
+            },
+            ScreenBounds {
+                x: 1080,
+                y: 0,
+                width: 1280,
+                height: 720,
+            },
+        ])
+        .expect("screen size should be valid");
+
+        assert_eq!(
+            size,
+            ScreenSize {
+                width: 2360,
+                height: 1920,
+            }
+        );
+    }
+
+    #[test]
+    fn pre_rotation_screen_size_expands_without_shrinking_either_axis() {
+        let current = ScreenSize {
+            width: 1920,
+            height: 1080,
+        };
+        let rotated = ScreenSize {
+            width: 1080,
+            height: 1920,
+        };
+
+        assert_eq!(
+            current.expanded_to(rotated),
+            ScreenSize {
+                width: 1920,
+                height: 1920,
+            }
+        );
     }
 
     #[test]
