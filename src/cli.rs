@@ -2,7 +2,7 @@ use std::io::{self, Write};
 
 use crate::{
     BackendError, ConfiguredBackend, DisplayMonitor, OutputMode, OutputModeChange,
-    OutputModeSelection, WindowGeometryChange, WindowId, WindowInfo,
+    OutputModeSelection, OutputRotation, WindowGeometryChange, WindowId, WindowInfo,
 };
 
 const HELP: &str = "\
@@ -24,7 +24,7 @@ Usage:
 
   Output Modes:
     xdisplay-ruler modes --output NAME [--backend x11]
-    xdisplay-ruler mode --output NAME --width N --height N [--rate HZ] [--backend x11]
+    xdisplay-ruler mode --output NAME [--width N --height N] [--rate HZ] [--rotate DIR] [--backend x11]
 
   Window Control:
     xdisplay-ruler raise WINDOW_SELECTOR [--backend x11]
@@ -60,6 +60,7 @@ Global Options:
 Output Options:
   --output NAME       X11 RandR output name, for example HDMI-2.
   --rate HZ           Refresh rate for mode, for example 60 or 59.94.
+  --rotate DIR        Output rotation: normal, left, right, or inverted.
 
 Window Options:
   --fullscreen        Resize and move the selected window to fill the output.
@@ -71,7 +72,8 @@ Geometry Options:
   --height N          Window height for configure. Must be positive.
 
 Notes:
-  mode requires --output, --width, and --height. --rate is optional.
+  mode requires --output and either --width with --height or --rotate.
+  --rate is optional when --width and --height are provided.
   place requires WINDOW_SELECTOR, --output, and --fullscreen.
   configure requires WINDOW_SELECTOR and at least one geometry option.
   Window selector name matches are exact and must identify one mapped window.
@@ -79,6 +81,7 @@ Notes:
 Examples:
   xdisplay-ruler modes --output HDMI-2
   xdisplay-ruler mode --output HDMI-2 --width 1920 --height 1080 --rate 60
+  xdisplay-ruler mode --output HDMI-2 --rotate left
   xdisplay-ruler raise --window-class Gnome-terminal
   xdisplay-ruler lower --window 0x800003
   xdisplay-ruler configure --window-class Gnome-terminal --x 0 --y 0
@@ -112,6 +115,7 @@ struct CliOptions {
     mode_width: Option<u16>,
     mode_height: Option<u16>,
     mode_refresh_millihertz: Option<u32>,
+    mode_rotation: Option<OutputRotation>,
     fullscreen: bool,
     window_selector: Option<WindowSelector>,
     geometry_change: WindowGeometryChange,
@@ -127,6 +131,7 @@ impl Default for CliOptions {
             mode_width: None,
             mode_height: None,
             mode_refresh_millihertz: None,
+            mode_rotation: None,
             fullscreen: false,
             window_selector: None,
             geometry_change: WindowGeometryChange::default(),
@@ -306,6 +311,10 @@ fn parse_options(arguments: &[String]) -> Result<CliOptions, String> {
                 let value = next_value(arguments, &mut index, "--rate")?;
                 options.mode_refresh_millihertz = Some(parse_refresh_millihertz(value)?);
             }
+            "--rotate" => {
+                let value = next_value(arguments, &mut index, "--rotate")?;
+                options.mode_rotation = Some(parse_output_rotation(value)?);
+            }
             argument => return Err(format!("unknown argument: {argument}")),
         }
 
@@ -421,6 +430,16 @@ fn parse_refresh_millihertz(value: &str) -> Result<u32, String> {
     Ok(rate)
 }
 
+fn parse_output_rotation(value: &str) -> Result<OutputRotation, String> {
+    match value {
+        "normal" => Ok(OutputRotation::Normal),
+        "left" => Ok(OutputRotation::Left),
+        "right" => Ok(OutputRotation::Right),
+        "inverted" => Ok(OutputRotation::Inverted),
+        _ => Err("--rotate must be one of: normal, left, right, inverted".to_string()),
+    }
+}
+
 fn parse_window_id(value: &str) -> Result<WindowId, String> {
     let normalized = value.trim();
     let parsed = normalized
@@ -491,14 +510,21 @@ fn run_mode_command(options: CliOptions) -> Result<OutputModeChange, String> {
     let output_name = options
         .output_name
         .ok_or_else(|| "--output is required".to_string())?;
+    if options.mode_width.is_some() != options.mode_height.is_some() {
+        return Err("--width and --height must be provided together".to_string());
+    }
+    if options.mode_width.is_none() && options.mode_rotation.is_none() {
+        return Err("--width with --height or --rotate is required".to_string());
+    }
+    if options.mode_refresh_millihertz.is_some() && options.mode_width.is_none() {
+        return Err("--rate requires --width and --height".to_string());
+    }
+
     let selection = OutputModeSelection {
-        width: options
-            .mode_width
-            .ok_or_else(|| "--width is required".to_string())?,
-        height: options
-            .mode_height
-            .ok_or_else(|| "--height is required".to_string())?,
+        width: options.mode_width,
+        height: options.mode_height,
         refresh_millihertz: options.mode_refresh_millihertz,
+        rotation: options.mode_rotation,
     };
     let backend = build_backend(&options.backend_name)?;
 
@@ -707,8 +733,8 @@ fn handle_mode_command_result(
 #[cfg(test)]
 mod tests {
     use super::{handle_mode_command_result, run, CliExit, WindowSelector};
-    use crate::OutputModeChange;
     use crate::{OutputMode, Rect, WindowId, WindowInfo};
+    use crate::{OutputModeChange, OutputRotation};
 
     #[test]
     fn reports_usage_errors_for_unknown_arguments() {
@@ -796,7 +822,7 @@ mod tests {
     }
 
     #[test]
-    fn requires_output_width_and_height_for_mode_command() {
+    fn requires_output_and_mode_or_rotation_for_mode_command() {
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
 
@@ -816,7 +842,7 @@ mod tests {
         assert_eq!(exit, CliExit::UsageError);
         assert_eq!(
             String::from_utf8_lossy(&stderr),
-            "--width is required\ntry --help\n"
+            "--width with --height or --rotate is required\ntry --help\n"
         );
 
         stderr.clear();
@@ -830,7 +856,21 @@ mod tests {
         assert_eq!(exit, CliExit::UsageError);
         assert_eq!(
             String::from_utf8_lossy(&stderr),
-            "--height is required\ntry --help\n"
+            "--width and --height must be provided together\ntry --help\n"
+        );
+
+        stderr.clear();
+        let exit = run(
+            ["mode", "--output", "HDMI-2", "--rate", "60"],
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "--width with --height or --rotate is required\ntry --help\n"
         );
     }
 
@@ -869,6 +909,20 @@ mod tests {
             String::from_utf8_lossy(&stderr),
             "--rate must be a positive refresh rate in Hz\ntry --help\n"
         );
+
+        stderr.clear();
+        let exit = run(
+            ["mode", "--output", "HDMI-2", "--rotate", "sideways"],
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "--rotate must be one of: normal, left, right, inverted\ntry --help\n"
+        );
     }
 
     #[test]
@@ -898,10 +952,8 @@ mod tests {
                 "in-memory",
                 "--output",
                 "HDMI-2",
-                "--width",
-                "1920",
-                "--height",
-                "1080",
+                "--rotate",
+                "left",
             ],
             &mut stdout,
             &mut stderr,
@@ -943,6 +995,27 @@ mod tests {
         assert!(super::parse_refresh_millihertz("0").is_err());
         assert!(super::parse_refresh_millihertz("59.9400").is_err());
         assert!(super::parse_refresh_millihertz("fast").is_err());
+    }
+
+    #[test]
+    fn parses_output_rotations() {
+        assert_eq!(
+            super::parse_output_rotation("normal"),
+            Ok(OutputRotation::Normal)
+        );
+        assert_eq!(
+            super::parse_output_rotation("left"),
+            Ok(OutputRotation::Left)
+        );
+        assert_eq!(
+            super::parse_output_rotation("right"),
+            Ok(OutputRotation::Right)
+        );
+        assert_eq!(
+            super::parse_output_rotation("inverted"),
+            Ok(OutputRotation::Inverted)
+        );
+        assert!(super::parse_output_rotation("sideways").is_err());
     }
 
     #[test]

@@ -123,8 +123,21 @@ When multiple modes share the same size, select a refresh rate:
 xdisplay-ruler mode --output HDMI-2 --width 1920 --height 1080 --rate 60
 ```
 
+Rotate an output while keeping its current mode:
+
+```bash
+xdisplay-ruler mode --output HDMI-2 --rotate left
+```
+
+Change mode and rotation together:
+
+```bash
+xdisplay-ruler mode --output HDMI-2 --width 1920 --height 1080 --rate 60 --rotate inverted
+```
+
 `mode` selects from modes already reported by the Xorg RandR extension for the
-output. It does not create custom modelines.
+output. It does not create custom modelines. `--rotate` accepts `normal`,
+`left`, `right`, or `inverted`.
 
 ## Change Window Stacking
 

@@ -88,7 +88,7 @@ xdisplay-ruler watch [--backend NAME] [--iterations N]
 
 ```text
 xdisplay-ruler modes --output NAME [--backend x11]
-xdisplay-ruler mode --output NAME --width N --height N [--rate HZ] [--backend x11]
+xdisplay-ruler mode --output NAME [--width N --height N] [--rate HZ] [--rotate DIR] [--backend x11]
 ```
 
 ### Window Control
@@ -122,15 +122,23 @@ backend because they are real X11 or RandR operations. Selecting
 
 ## Command Requirements
 
-- `mode` requires `--output`, `--width`, and `--height`. `--rate` is optional.
+- `mode` requires `--output` and either `--width` with `--height` or
+  `--rotate`.
+- `--rotate` accepts `normal`, `left`, `right`, or `inverted`. It updates the
+  RandR CRTC rotation. If `--width` and `--height` are omitted, the backend
+  reuses the current active mode.
+- `--rate` is optional when `--width` and `--height` are provided.
 - `mode` selects from modes already reported by RandR for the output and sends
   `SetCrtcConfig` to the output's active CRTC while preserving the CRTC
-  position, rotation, and output list. It does not create custom modelines.
+  position and output list. When `--rotate` is omitted, it preserves the current
+  rotation. When `--rotate` is provided, it replaces only the basic rotation and
+  preserves existing reflection bits. It does not create custom modelines.
 - After a successful X11 `mode` switch, the backend remaps every enabled
   XInput touch device to the selected output by updating its
-  `Coordinate Transformation Matrix` from the output rectangle relative to the
-  root window. If this touch remapping fails after RandR accepts the mode
-  switch, the command still succeeds and prints a warning to standard error.
+  `Coordinate Transformation Matrix` from the output rectangle and basic
+  rotation relative to the root window. If this touch remapping fails after
+  RandR accepts the mode switch, the command still succeeds and prints a
+  warning to standard error.
 - `place` currently requires `--fullscreen`. It uses the selected output
   geometry, configures the target window to that rectangle, and raises the
   window.

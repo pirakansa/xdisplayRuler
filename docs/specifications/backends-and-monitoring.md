@@ -36,13 +36,14 @@ The current X11 backend can list and switch output modes:
 - mark the current CRTC mode and RandR preferred modes
 - switch to an existing output mode with RandR `SetCrtcConfig`
 - preserve the active CRTC position, rotation, and output list while switching
-  mode
+  mode, unless a new basic rotation is explicitly selected
+- reuse the current active CRTC mode when only rotation is selected
 - after a successful mode switch, refresh the selected output rectangle and
   update `Coordinate Transformation Matrix` on every enabled XInput device with
   a Touch class so touch coordinates follow the output's root-relative
-  rectangle; if this touch remapping fails after RandR accepts the mode switch,
-  the mode change remains successful and the backend returns a warning for the
-  CLI to report
+  rectangle and basic rotation; if this touch remapping fails after RandR
+  accepts the mode switch, the mode change remains successful and the backend
+  returns a warning for the CLI to report
 
 The current X11 backend can also send low-level window configuration requests:
 

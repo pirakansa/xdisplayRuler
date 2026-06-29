@@ -6,7 +6,7 @@ pub mod state;
 
 pub use backend::{
     BackendError, ConfiguredBackend, DisplayBackend, InMemoryBackend, OutputMode, OutputModeChange,
-    OutputModeSelection, WindowGeometryChange, X11Backend,
+    OutputModeSelection, OutputRotation, WindowGeometryChange, X11Backend,
 };
 pub use models::{DisplayEvent, DisplayOutput, Rect, WindowId, WindowInfo};
 pub use monitor::DisplayMonitor;

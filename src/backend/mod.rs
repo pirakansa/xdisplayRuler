@@ -34,9 +34,18 @@ pub struct OutputMode {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OutputModeSelection {
-    pub width: u16,
-    pub height: u16,
+    pub width: Option<u16>,
+    pub height: Option<u16>,
     pub refresh_millihertz: Option<u32>,
+    pub rotation: Option<OutputRotation>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OutputRotation {
+    Normal,
+    Left,
+    Right,
+    Inverted,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]

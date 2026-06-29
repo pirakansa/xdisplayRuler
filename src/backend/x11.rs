@@ -19,7 +19,7 @@ use x11rb::{
 
 use crate::{
     DisplayBackend, DisplayEvent, DisplayOutput, OutputMode, OutputModeChange, OutputModeSelection,
-    Rect, WindowGeometryChange, WindowId, WindowInfo,
+    OutputRotation, Rect, WindowGeometryChange, WindowId, WindowInfo,
 };
 
 const COORDINATE_TRANSFORMATION_MATRIX: &str = "Coordinate Transformation Matrix";
@@ -534,13 +534,14 @@ impl X11Backend {
             ));
         }
 
-        let selected_mode = self.select_output_mode(&resources, &output, selection)?;
         let crtc = self
             .connection
             .randr_get_crtc_info(output.crtc, resources.config_timestamp)
             .map_err(to_io_error)?
             .reply()
             .map_err(to_io_error)?;
+        let selected_mode = self.select_output_mode(&resources, &output, &crtc, selection)?;
+        let selected_rotation = selected_output_rotation(crtc.rotation, selection.rotation);
         let outputs = if crtc.outputs.is_empty() {
             vec![output_id]
         } else {
@@ -555,7 +556,7 @@ impl X11Backend {
                 crtc.x,
                 crtc.y,
                 selected_mode.id,
-                crtc.rotation,
+                selected_rotation,
                 &outputs,
             )
             .map_err(to_io_error)?
@@ -570,7 +571,7 @@ impl X11Backend {
         }
 
         let mut change = OutputModeChange::default();
-        if let Err(error) = self.remap_touch_devices_to_output(output_name) {
+        if let Err(error) = self.remap_touch_devices_to_output(output_name, selected_rotation) {
             change.warnings.push(format!(
                 "output mode changed, but touch remapping failed: {error}"
             ));
@@ -580,7 +581,11 @@ impl X11Backend {
         Ok(change)
     }
 
-    fn remap_touch_devices_to_output(&self, output_name: &str) -> io::Result<()> {
+    fn remap_touch_devices_to_output(
+        &self,
+        output_name: &str,
+        rotation: randr::Rotation,
+    ) -> io::Result<()> {
         let root_geometry = self
             .connection
             .get_geometry(self.root_window())
@@ -609,7 +614,7 @@ impl X11Backend {
                 format!("output is disconnected after mode switch: {output_name}"),
             )
         })?;
-        let matrix = coordinate_transformation_matrix(&root, &output)?;
+        let matrix = coordinate_transformation_matrix(&root, &output, rotation)?;
 
         self.apply_touch_coordinate_transformation(matrix)
     }
@@ -666,14 +671,37 @@ impl X11Backend {
         &self,
         resources: &GetScreenResourcesCurrentReply,
         output: &randr::GetOutputInfoReply,
+        crtc: &randr::GetCrtcInfoReply,
         selection: &OutputModeSelection,
     ) -> io::Result<X11ModeInfo> {
+        let (Some(width), Some(height)) = (selection.width, selection.height) else {
+            if crtc.mode == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "output has no active mode to reuse",
+                ));
+            }
+
+            return mode_infos(resources)
+                .into_iter()
+                .find(|mode| mode.id == crtc.mode)
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!(
+                            "active mode id {} was not present in screen resources",
+                            crtc.mode
+                        ),
+                    )
+                });
+        };
+
         let mode_infos = mode_infos(resources);
         let mut candidates = output
             .modes
             .iter()
             .filter_map(|mode| mode_infos.iter().find(|info| info.id == *mode))
-            .filter(|mode| mode.width == selection.width && mode.height == selection.height)
+            .filter(|mode| mode.width == width && mode.height == height)
             .filter(|mode| refresh_matches(mode.refresh_millihertz, selection.refresh_millihertz))
             .cloned()
             .collect::<Vec<_>>();
@@ -797,11 +825,12 @@ fn mode_not_found_message(selection: &OutputModeSelection) -> String {
         .refresh_millihertz
         .map(|rate| format!(" at {}", format_refresh_millihertz(rate)))
         .unwrap_or_default();
+    let size = match (selection.width, selection.height) {
+        (Some(width), Some(height)) => format!("{width}x{height}"),
+        _ => "active mode".to_string(),
+    };
 
-    format!(
-        "output mode not found: {}x{}{}",
-        selection.width, selection.height, rate
-    )
+    format!("output mode not found: {size}{rate}")
 }
 
 fn format_refresh_millihertz(refresh_millihertz: u32) -> String {
@@ -829,7 +858,46 @@ fn set_config_status_label(status: randr::SetConfig) -> &'static str {
     }
 }
 
-fn coordinate_transformation_matrix(root: &Rect, output: &Rect) -> io::Result<[f32; 9]> {
+fn selected_output_rotation(
+    current: randr::Rotation,
+    selected: Option<OutputRotation>,
+) -> randr::Rotation {
+    let basic = selected.map_or_else(|| basic_rotation(current), output_rotation_to_randr);
+    let reflection = u16::from(current)
+        & (u16::from(randr::Rotation::REFLECT_X) | u16::from(randr::Rotation::REFLECT_Y));
+
+    randr::Rotation::from(u16::from(basic) | reflection)
+}
+
+fn output_rotation_to_randr(rotation: OutputRotation) -> randr::Rotation {
+    match rotation {
+        OutputRotation::Normal => randr::Rotation::ROTATE0,
+        OutputRotation::Left => randr::Rotation::ROTATE90,
+        OutputRotation::Right => randr::Rotation::ROTATE270,
+        OutputRotation::Inverted => randr::Rotation::ROTATE180,
+    }
+}
+
+fn basic_rotation(rotation: randr::Rotation) -> randr::Rotation {
+    let basic = u16::from(rotation)
+        & (u16::from(randr::Rotation::ROTATE0)
+            | u16::from(randr::Rotation::ROTATE90)
+            | u16::from(randr::Rotation::ROTATE180)
+            | u16::from(randr::Rotation::ROTATE270));
+
+    match randr::Rotation::from(basic) {
+        randr::Rotation::ROTATE90 => randr::Rotation::ROTATE90,
+        randr::Rotation::ROTATE180 => randr::Rotation::ROTATE180,
+        randr::Rotation::ROTATE270 => randr::Rotation::ROTATE270,
+        _ => randr::Rotation::ROTATE0,
+    }
+}
+
+fn coordinate_transformation_matrix(
+    root: &Rect,
+    output: &Rect,
+    rotation: randr::Rotation,
+) -> io::Result<[f32; 9]> {
     if root.width == 0 || root.height == 0 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -839,18 +907,57 @@ fn coordinate_transformation_matrix(root: &Rect, output: &Rect) -> io::Result<[f
 
     let root_width = root.width as f32;
     let root_height = root.height as f32;
+    let output_width = output.width as f32 / root_width;
+    let output_height = output.height as f32 / root_height;
+    let output_x = (output.x - root.x) as f32 / root_width;
+    let output_y = (output.y - root.y) as f32 / root_height;
 
-    Ok([
-        output.width as f32 / root_width,
-        0.0,
-        (output.x - root.x) as f32 / root_width,
-        0.0,
-        output.height as f32 / root_height,
-        (output.y - root.y) as f32 / root_height,
-        0.0,
-        0.0,
-        1.0,
-    ])
+    Ok(match basic_rotation(rotation) {
+        randr::Rotation::ROTATE90 => [
+            0.0,
+            -output_width,
+            output_x + output_width,
+            output_height,
+            0.0,
+            output_y,
+            0.0,
+            0.0,
+            1.0,
+        ],
+        randr::Rotation::ROTATE180 => [
+            -output_width,
+            0.0,
+            output_x + output_width,
+            0.0,
+            -output_height,
+            output_y + output_height,
+            0.0,
+            0.0,
+            1.0,
+        ],
+        randr::Rotation::ROTATE270 => [
+            0.0,
+            output_width,
+            output_x,
+            -output_height,
+            0.0,
+            output_y + output_height,
+            0.0,
+            0.0,
+            1.0,
+        ],
+        _ => [
+            output_width,
+            0.0,
+            output_x,
+            0.0,
+            output_height,
+            output_y,
+            0.0,
+            0.0,
+            1.0,
+        ],
+    })
 }
 
 fn touch_device(device: &XIDeviceInfo) -> bool {
@@ -955,12 +1062,12 @@ fn to_io_error(error: impl std::fmt::Display) -> io::Error {
 #[cfg(test)]
 mod tests {
     use super::{
-        coordinate_transformation_matrix, mode_infos, refresh_millihertz, text_property_value,
-        touch_device, window_class_value, x11_window_id, X11OutputSnapshot, X11Snapshot,
-        X11WindowSnapshot,
+        coordinate_transformation_matrix, mode_infos, output_rotation_to_randr, refresh_millihertz,
+        selected_output_rotation, text_property_value, touch_device, window_class_value,
+        x11_window_id, X11OutputSnapshot, X11Snapshot, X11WindowSnapshot,
     };
-    use crate::{DisplayEvent, DisplayOutput, Rect, WindowId, WindowInfo};
-    use x11rb::protocol::randr::{GetScreenResourcesCurrentReply, ModeFlag, ModeInfo};
+    use crate::{DisplayEvent, DisplayOutput, OutputRotation, Rect, WindowId, WindowInfo};
+    use x11rb::protocol::randr::{GetScreenResourcesCurrentReply, ModeFlag, ModeInfo, Rotation};
     use x11rb::protocol::xinput::{
         DeviceClass, DeviceClassData, DeviceClassDataKey, DeviceClassDataTouch, DeviceId,
         DeviceType, TouchMode, XIDeviceInfo,
@@ -1132,18 +1239,81 @@ mod tests {
         let root = Rect::new(0, 0, 3840, 1080);
         let output = Rect::new(1920, 0, 1920, 1080);
 
-        let matrix =
-            coordinate_transformation_matrix(&root, &output).expect("matrix should be calculated");
+        let matrix = coordinate_transformation_matrix(&root, &output, Rotation::ROTATE0)
+            .expect("matrix should be calculated");
 
         assert_eq!(matrix, [0.5, 0.0, 0.5, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn calculates_coordinate_transformation_matrix_for_rotated_output() {
+        let root = Rect::new(0, 0, 3840, 2160);
+        let output = Rect::new(1920, 0, 1080, 1920);
+
+        assert_eq!(
+            coordinate_transformation_matrix(&root, &output, Rotation::ROTATE90)
+                .expect("matrix should be calculated"),
+            [0.0, -0.28125, 0.78125, 0.8888889, 0.0, 0.0, 0.0, 0.0, 1.0,]
+        );
+        assert_eq!(
+            coordinate_transformation_matrix(&root, &output, Rotation::ROTATE180)
+                .expect("matrix should be calculated"),
+            [-0.28125, 0.0, 0.78125, 0.0, -0.8888889, 0.8888889, 0.0, 0.0, 1.0,]
+        );
+        assert_eq!(
+            coordinate_transformation_matrix(&root, &output, Rotation::ROTATE270)
+                .expect("matrix should be calculated"),
+            [0.0, 0.28125, 0.5, -0.8888889, 0.0, 0.8888889, 0.0, 0.0, 1.0,]
+        );
+    }
+
+    #[test]
+    fn maps_public_output_rotations_to_randr_basic_rotations() {
+        assert_eq!(
+            output_rotation_to_randr(OutputRotation::Normal),
+            Rotation::ROTATE0
+        );
+        assert_eq!(
+            output_rotation_to_randr(OutputRotation::Left),
+            Rotation::ROTATE90
+        );
+        assert_eq!(
+            output_rotation_to_randr(OutputRotation::Right),
+            Rotation::ROTATE270
+        );
+        assert_eq!(
+            output_rotation_to_randr(OutputRotation::Inverted),
+            Rotation::ROTATE180
+        );
+    }
+
+    #[test]
+    fn selected_output_rotation_preserves_reflection_bits() {
+        let current = Rotation::ROTATE90 | Rotation::REFLECT_X | Rotation::REFLECT_Y;
+
+        assert_eq!(
+            selected_output_rotation(current, Some(OutputRotation::Right)),
+            Rotation::ROTATE270 | Rotation::REFLECT_X | Rotation::REFLECT_Y
+        );
+        assert_eq!(selected_output_rotation(current, None), current);
     }
 
     #[test]
     fn rejects_coordinate_transformation_matrix_for_invalid_root() {
         let output = Rect::new(0, 0, 1920, 1080);
 
-        assert!(coordinate_transformation_matrix(&Rect::new(0, 0, 0, 1080), &output).is_err());
-        assert!(coordinate_transformation_matrix(&Rect::new(0, 0, 1920, 0), &output).is_err());
+        assert!(coordinate_transformation_matrix(
+            &Rect::new(0, 0, 0, 1080),
+            &output,
+            Rotation::ROTATE0
+        )
+        .is_err());
+        assert!(coordinate_transformation_matrix(
+            &Rect::new(0, 0, 1920, 0),
+            &output,
+            Rotation::ROTATE0
+        )
+        .is_err());
     }
 
     #[test]
