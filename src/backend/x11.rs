@@ -818,6 +818,7 @@ impl X11Backend {
         crtc: &randr::GetCrtcInfoReply,
         selection: &OutputModeSelection,
     ) -> io::Result<X11ModeInfo> {
+        let selected_rotation = selected_output_rotation(crtc.rotation, selection.rotation);
         let (Some(width), Some(height)) = (selection.width, selection.height) else {
             if crtc.mode == 0 {
                 return Err(io::Error::new(
@@ -840,12 +841,13 @@ impl X11Backend {
                 });
         };
 
+        let (mode_width, mode_height) = requested_mode_size(width, height, selected_rotation);
         let mode_infos = mode_infos(resources);
         let mut candidates = output
             .modes
             .iter()
             .filter_map(|mode| mode_infos.iter().find(|info| info.id == *mode))
-            .filter(|mode| mode.width == width && mode.height == height)
+            .filter(|mode| mode.width == mode_width && mode.height == mode_height)
             .filter(|mode| refresh_matches(mode.refresh_millihertz, selection.refresh_millihertz))
             .cloned()
             .collect::<Vec<_>>();
@@ -1044,6 +1046,13 @@ fn transformed_mode_size(mode: &X11ModeInfo, rotation: randr::Rotation) -> (u16,
     }
 }
 
+fn requested_mode_size(width: u16, height: u16, rotation: randr::Rotation) -> (u16, u16) {
+    match basic_rotation(rotation) {
+        randr::Rotation::ROTATE90 | randr::Rotation::ROTATE270 => (height, width),
+        _ => (width, height),
+    }
+}
+
 fn screen_size_for_bounds(bounds: &[ScreenBounds]) -> io::Result<ScreenSize> {
     let mut width = 1_i64;
     let mut height = 1_i64;
@@ -1236,9 +1245,9 @@ fn to_io_error(error: impl std::fmt::Display) -> io::Error {
 mod tests {
     use super::{
         coordinate_transformation_matrix, mode_infos, output_rotation_to_randr, refresh_millihertz,
-        screen_size_for_bounds, selected_output_rotation, text_property_value, touch_device,
-        transformed_mode_size, window_class_value, x11_window_id, ScreenBounds, ScreenSize,
-        X11ModeInfo, X11OutputSnapshot, X11Snapshot, X11WindowSnapshot,
+        requested_mode_size, screen_size_for_bounds, selected_output_rotation, text_property_value,
+        touch_device, transformed_mode_size, window_class_value, x11_window_id, ScreenBounds,
+        ScreenSize, X11ModeInfo, X11OutputSnapshot, X11Snapshot, X11WindowSnapshot,
     };
     use crate::{DisplayEvent, DisplayOutput, OutputRotation, Rect, WindowId, WindowInfo};
     use x11rb::protocol::randr::{GetScreenResourcesCurrentReply, ModeFlag, ModeInfo, Rotation};
@@ -1497,6 +1506,26 @@ mod tests {
         assert_eq!(
             transformed_mode_size(&mode, Rotation::ROTATE270),
             (1080, 1920)
+        );
+    }
+
+    #[test]
+    fn rotated_requested_size_maps_to_unrotated_randr_mode_size() {
+        assert_eq!(
+            requested_mode_size(1080, 1920, Rotation::ROTATE90),
+            (1920, 1080)
+        );
+        assert_eq!(
+            requested_mode_size(1080, 1920, Rotation::ROTATE270),
+            (1920, 1080)
+        );
+        assert_eq!(
+            requested_mode_size(1920, 1080, Rotation::ROTATE0),
+            (1920, 1080)
+        );
+        assert_eq!(
+            requested_mode_size(1920, 1080, Rotation::ROTATE180),
+            (1920, 1080)
         );
     }
 

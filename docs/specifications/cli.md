@@ -143,10 +143,13 @@ windows unless the backend is extended by tests.
   `SetCrtcConfig` to the output's active CRTC while preserving the CRTC
   position and output list. When `--rotate` is omitted, it preserves the current
   rotation. When `--rotate` is provided, it replaces only the basic rotation and
-  preserves existing reflection bits. Before applying a rotated CRTC config, it
-  expands the RandR screen size when needed so the rotated output is not clipped;
-  after the config is accepted, it shrinks the screen size to the active output
-  bounds when possible. It does not create custom modelines.
+  preserves existing reflection bits. Width and height are interpreted as the
+  final displayed output size, so `--width 1080 --height 1920 --rotate left`
+  can select an underlying `1920x1080` RandR mode. Before applying a rotated
+  CRTC config, it expands the RandR screen size when needed so the rotated
+  output is not clipped; after the config is accepted, it shrinks the screen
+  size to the active output bounds when possible. It does not create custom
+  modelines.
 - After a successful X11 `mode` switch, the backend remaps every enabled
   XInput touch device to the selected output by updating its
   `Coordinate Transformation Matrix` from the output rectangle and basic

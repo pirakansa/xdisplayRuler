@@ -138,6 +138,12 @@ Change mode and rotation together:
 xdisplay-ruler mode --output HDMI-2 --width 1920 --height 1080 --rate 60 --rotate inverted
 ```
 
+For left or right rotation, pass the displayed size after rotation:
+
+```bash
+xdisplay-ruler mode --output HDMI-2 --width 1080 --height 1920 --rate 60 --rotate left
+```
+
 `mode` selects from modes already reported by the Xorg RandR extension for the
 output. It does not create custom modelines. `--rotate` accepts `normal`,
 `left`, `right`, or `inverted`.
