@@ -91,6 +91,8 @@ vorbere run build
 - `src/cli/options.rs`: option parsing and value validation
 - `src/cli/command.rs`: backend-facing command execution
 - `src/cli/report.rs`: user-facing text rendering for CLI reports
+- `src/layout/policy.rs`: layout schema, selectors, and validation errors
+- `src/layout/planner.rs`: enforce planning and stacking policy decisions
 - `src/lib.rs`: public module exports
 - `src/main.rs`: binary entry point
 - `src/models/`: display and window data types

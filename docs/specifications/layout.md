@@ -29,6 +29,12 @@ must be a positive integer. The default is `1000`.
 
 `--dry-run` prints one plan and exits, even when `--once` is omitted.
 
+## Implementation Layout
+
+- `src/layout/mod.rs`: public layout API surface and re-exports.
+- `src/layout/policy.rs`: JSON schema types, selector parsing, and validation errors.
+- `src/layout/planner.rs`: selector/output resolution and enforce operation planning.
+
 ## Layout Schema
 
 The root object fields are:
