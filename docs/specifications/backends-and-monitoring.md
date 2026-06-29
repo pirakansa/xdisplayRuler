@@ -13,6 +13,18 @@ Backends collect display events. The monitor applies those events to
 The current implementation includes `InMemoryBackend`. It is used by the test
 suite and drains its configured events the first time it is polled.
 
+## Implementation Layout
+
+- `src/backend/mod.rs`: backend selection and capability dispatch.
+- `src/backend/memory.rs`: deterministic in-memory backend for tests and diagnostics.
+- `src/backend/x11/mod.rs`: X11 backend entrypoint, connection setup, and backend trait wiring.
+- `src/backend/x11/snapshot.rs`: snapshot collection, window property reads, and relevant-event waiting.
+- `src/backend/x11/control.rs`: RandR mode switching, touch remapping, and X11 window control requests.
+- `src/backend/x11/mode.rs`: pure mode-selection and screen-size helper logic.
+- `src/backend/x11/touch.rs`: coordinate transformation helpers for XInput touch devices.
+- `src/backend/x11/window.rs`: text and WM_CLASS parsing plus X11 window id validation helpers.
+- `src/backend/x11/types.rs`: X11 snapshot and mode-related internal data types.
+
 `X11Backend` connects to the Xorg server through the pure Rust `x11rb` protocol
 client. It does not call the `xrandr` command and does not link to `libXrandr`.
 On connection, it verifies that the server exposes the RANDR extension.

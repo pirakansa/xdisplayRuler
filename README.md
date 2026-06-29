@@ -93,6 +93,8 @@ vorbere run build
 - `src/cli/report.rs`: user-facing text rendering for CLI reports
 - `src/layout/policy.rs`: layout schema, selectors, and validation errors
 - `src/layout/planner.rs`: enforce planning and stacking policy decisions
+- `src/backend/x11/snapshot.rs`: X11 snapshot collection, window discovery, and event waiting
+- `src/backend/x11/control.rs`: RandR mode changes and X11 window control operations
 - `src/lib.rs`: public module exports
 - `src/main.rs`: binary entry point
 - `src/models/`: display and window data types
