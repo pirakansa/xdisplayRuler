@@ -16,6 +16,8 @@ pub struct WindowInfo {
     pub id: WindowId,
     pub title: Option<String>,
     pub app_id: Option<String>,
+    pub class_name: Option<String>,
+    pub instance_name: Option<String>,
     pub geometry: Rect,
     pub mapped: bool,
 }
@@ -26,6 +28,8 @@ impl WindowInfo {
             id,
             title: None,
             app_id: None,
+            class_name: None,
+            instance_name: None,
             geometry,
             mapped: true,
         }

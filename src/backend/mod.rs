@@ -3,7 +3,7 @@ mod x11;
 
 use std::io;
 
-use crate::{DisplayEvent, WindowId};
+use crate::{DisplayEvent, WindowId, WindowInfo};
 
 pub use memory::InMemoryBackend;
 pub use x11::X11Backend;
@@ -94,6 +94,16 @@ impl ConfiguredBackend {
                 "in-memory backend cannot configure X11 windows",
             )),
             Self::X11(backend) => backend.configure_window(id, change),
+        }
+    }
+
+    pub fn windows(&self) -> io::Result<Vec<WindowInfo>> {
+        match self {
+            Self::InMemory(_) => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "in-memory backend cannot resolve X11 windows",
+            )),
+            Self::X11(backend) => backend.windows(),
         }
     }
 

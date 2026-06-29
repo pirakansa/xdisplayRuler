@@ -81,6 +81,8 @@ impl X11OutputSnapshot {
 struct X11WindowSnapshot {
     id: WindowId,
     title: Option<String>,
+    class_name: Option<String>,
+    instance_name: Option<String>,
     geometry: Rect,
 }
 
@@ -88,8 +90,16 @@ impl X11WindowSnapshot {
     fn into_window_info(self) -> WindowInfo {
         let mut window = WindowInfo::mapped(self.id, self.geometry);
         window.title = self.title;
+        window.class_name = self.class_name;
+        window.instance_name = self.instance_name;
         window
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct X11WindowClass {
+    instance_name: String,
+    class_name: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -304,9 +314,12 @@ impl X11Backend {
                 Ok(geometry) => geometry,
                 Err(_) => continue,
             };
+            let class = self.window_class(window)?;
             windows.push(X11WindowSnapshot {
                 id: WindowId(u64::from(window)),
                 title: self.window_title(window)?,
+                class_name: class.as_ref().map(|class| class.class_name.clone()),
+                instance_name: class.map(|class| class.instance_name),
                 geometry: Rect::new(
                     i32::from(geometry.x),
                     i32::from(geometry.y),
@@ -317,6 +330,14 @@ impl X11Backend {
         }
 
         Ok(windows)
+    }
+
+    pub fn windows(&self) -> io::Result<Vec<WindowInfo>> {
+        Ok(self
+            .window_snapshots()?
+            .into_iter()
+            .map(X11WindowSnapshot::into_window_info)
+            .collect())
     }
 
     fn focused_window(&self) -> io::Result<Option<WindowId>> {
@@ -340,6 +361,14 @@ impl X11Backend {
         self.window_text_property(window, "WM_NAME", "STRING")
     }
 
+    fn window_class(&self, window: u32) -> io::Result<Option<X11WindowClass>> {
+        let Some(value) = self.window_bytes_property(window, "WM_CLASS", "STRING")? else {
+            return Ok(None);
+        };
+
+        Ok(window_class_value(&value))
+    }
+
     fn window_text_property(
         &self,
         window: u32,
@@ -356,6 +385,28 @@ impl X11Backend {
             .map_err(to_io_error)?;
 
         Ok(text_property_value(&property.value))
+    }
+
+    fn window_bytes_property(
+        &self,
+        window: u32,
+        property_name: &str,
+        property_type: &str,
+    ) -> io::Result<Option<Vec<u8>>> {
+        let property_atom = self.intern_atom(property_name)?;
+        let type_atom = self.intern_atom(property_type)?;
+        let property = self
+            .connection
+            .get_property(false, window, property_atom, type_atom, 0, 1024)
+            .map_err(to_io_error)?
+            .reply()
+            .map_err(to_io_error)?;
+
+        if property.value.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(property.value))
+        }
     }
 
     fn intern_atom(&self, name: &str) -> io::Result<u32> {
@@ -715,6 +766,20 @@ fn text_property_value(value: &[u8]) -> Option<String> {
     }
 }
 
+fn window_class_value(value: &[u8]) -> Option<X11WindowClass> {
+    let mut parts = value
+        .split(|byte| *byte == b'\0')
+        .filter(|part| !part.is_empty())
+        .map(|part| String::from_utf8_lossy(part).into_owned());
+    let instance_name = parts.next()?;
+    let class_name = parts.next()?;
+
+    Some(X11WindowClass {
+        instance_name,
+        class_name,
+    })
+}
+
 fn x11_window_id(id: WindowId) -> io::Result<u32> {
     u32::try_from(id.0).map_err(|_| {
         io::Error::new(
@@ -774,8 +839,8 @@ fn to_io_error(error: impl std::fmt::Display) -> io::Error {
 #[cfg(test)]
 mod tests {
     use super::{
-        mode_infos, refresh_millihertz, text_property_value, x11_window_id, X11OutputSnapshot,
-        X11Snapshot, X11WindowSnapshot,
+        mode_infos, refresh_millihertz, text_property_value, window_class_value, x11_window_id,
+        X11OutputSnapshot, X11Snapshot, X11WindowSnapshot,
     };
     use crate::{DisplayEvent, DisplayOutput, Rect, WindowId, WindowInfo};
     use x11rb::protocol::randr::{GetScreenResourcesCurrentReply, ModeFlag, ModeInfo};
@@ -791,11 +856,15 @@ mod tests {
                 X11WindowSnapshot {
                     id: WindowId(0x10),
                     title: Some("first".to_string()),
+                    class_name: Some("Code".to_string()),
+                    instance_name: Some("code".to_string()),
                     geometry: Rect::new(0, 0, 800, 600),
                 },
                 X11WindowSnapshot {
                     id: WindowId(0x20),
                     title: None,
+                    class_name: None,
+                    instance_name: None,
                     geometry: Rect::new(800, 0, 640, 480),
                 },
             ],
@@ -825,6 +894,8 @@ mod tests {
                 id: WindowId(0x10),
                 title: Some("first".to_string()),
                 app_id: None,
+                class_name: Some("Code".to_string()),
+                instance_name: Some("code".to_string()),
                 geometry: Rect::new(0, 0, 800, 600),
                 mapped: true,
             })
@@ -865,6 +936,16 @@ mod tests {
         );
         assert_eq!(text_property_value(b""), None);
         assert_eq!(text_property_value(b"\0\0"), None);
+    }
+
+    #[test]
+    fn parses_window_class_values() {
+        let class = window_class_value(b"code\0Code\0").expect("class should parse");
+
+        assert_eq!(class.instance_name, "code");
+        assert_eq!(class.class_name, "Code");
+        assert_eq!(window_class_value(b"code\0"), None);
+        assert_eq!(window_class_value(b""), None);
     }
 
     #[test]

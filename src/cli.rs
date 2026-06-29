@@ -2,7 +2,7 @@ use std::io::{self, Write};
 
 use crate::{
     BackendError, ConfiguredBackend, DisplayMonitor, OutputMode, OutputModeSelection,
-    WindowGeometryChange, WindowId,
+    WindowGeometryChange, WindowId, WindowInfo,
 };
 
 const HELP: &str = "\
@@ -13,10 +13,10 @@ Usage:
   xdisplay-ruler watch [--backend x11] [--iterations N]
   xdisplay-ruler modes --output NAME [--backend x11]
   xdisplay-ruler mode --output NAME --width N --height N [--rate HZ] [--backend x11]
-  xdisplay-ruler place --window ID --output NAME --fullscreen [--backend x11]
-  xdisplay-ruler configure --window ID [--x N] [--y N] [--width N] [--height N] [--backend x11]
-  xdisplay-ruler raise --window ID [--backend x11]
-  xdisplay-ruler lower --window ID [--backend x11]
+  xdisplay-ruler place WINDOW_SELECTOR --output NAME --fullscreen [--backend x11]
+  xdisplay-ruler configure WINDOW_SELECTOR [--x N] [--y N] [--width N] [--height N] [--backend x11]
+  xdisplay-ruler raise WINDOW_SELECTOR [--backend x11]
+  xdisplay-ruler lower WINDOW_SELECTOR [--backend x11]
   xdisplay-ruler --help
   xdisplay-ruler --version
 
@@ -37,6 +37,10 @@ Options:
   --rate HZ           Refresh rate for mode, for example 60 or 59.94.
   --fullscreen        Resize and move the window to fill the output.
   --window ID         X11 window ID as hex, for example 0x800003.
+  --window-title NAME Select a window by exact X11 window title.
+  --window-class NAME Select a window by exact WM_CLASS class name.
+  --window-instance NAME
+                     Select a window by exact WM_CLASS instance name.
   --x N               Window X position for configure.
   --y N               Window Y position for configure.
   --width N           Window width for configure.
@@ -71,7 +75,7 @@ struct CliOptions {
     mode_height: Option<u16>,
     mode_refresh_millihertz: Option<u32>,
     fullscreen: bool,
-    window_id: Option<WindowId>,
+    window_selector: Option<WindowSelector>,
     geometry_change: WindowGeometryChange,
 }
 
@@ -86,10 +90,18 @@ impl Default for CliOptions {
             mode_height: None,
             mode_refresh_millihertz: None,
             fullscreen: false,
-            window_id: None,
+            window_selector: None,
             geometry_change: WindowGeometryChange::default(),
         }
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum WindowSelector {
+    Id(WindowId),
+    Title(String),
+    Class(String),
+    Instance(String),
 }
 
 pub fn run<I, S>(
@@ -218,7 +230,19 @@ fn parse_options(arguments: &[String]) -> Result<CliOptions, String> {
             }
             "--window" => {
                 let value = next_value(arguments, &mut index, "--window")?;
-                options.window_id = Some(parse_window_id(value)?);
+                options.set_window_selector(WindowSelector::Id(parse_window_id(value)?))?;
+            }
+            "--window-title" => {
+                let value = next_value(arguments, &mut index, "--window-title")?;
+                options.set_window_selector(WindowSelector::Title(value.to_string()))?;
+            }
+            "--window-class" => {
+                let value = next_value(arguments, &mut index, "--window-class")?;
+                options.set_window_selector(WindowSelector::Class(value.to_string()))?;
+            }
+            "--window-instance" => {
+                let value = next_value(arguments, &mut index, "--window-instance")?;
+                options.set_window_selector(WindowSelector::Instance(value.to_string()))?;
             }
             "--x" => {
                 let value = next_value(arguments, &mut index, "--x")?;
@@ -251,6 +275,20 @@ fn parse_options(arguments: &[String]) -> Result<CliOptions, String> {
     }
 
     Ok(options)
+}
+
+impl CliOptions {
+    fn set_window_selector(&mut self, selector: WindowSelector) -> Result<(), String> {
+        if self.window_selector.is_some() {
+            return Err(
+                "--window, --window-title, --window-class, and --window-instance are mutually exclusive"
+                    .to_string(),
+            );
+        }
+
+        self.window_selector = Some(selector);
+        Ok(())
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -388,10 +426,9 @@ fn run_watch(options: CliOptions, stdout: &mut impl Write) -> Result<(), String>
 }
 
 fn run_stack_command(options: CliOptions, command: StackCommand) -> Result<(), String> {
-    let window_id = options
-        .window_id
-        .ok_or_else(|| "--window is required".to_string())?;
+    let selector = required_window_selector(&options)?;
     let backend = build_backend(&options.backend_name)?;
+    let window_id = resolve_window_selector(&backend, &selector)?;
 
     match command {
         StackCommand::Raise => backend.raise_window(window_id),
@@ -433,9 +470,7 @@ fn run_mode_command(options: CliOptions) -> Result<(), String> {
 }
 
 fn run_place_command(options: CliOptions) -> Result<(), String> {
-    let window_id = options
-        .window_id
-        .ok_or_else(|| "--window is required".to_string())?;
+    let selector = required_window_selector(&options)?;
     let output_name = options
         .output_name
         .ok_or_else(|| "--output is required".to_string())?;
@@ -445,24 +480,98 @@ fn run_place_command(options: CliOptions) -> Result<(), String> {
     }
 
     let backend = build_backend(&options.backend_name)?;
+    let window_id = resolve_window_selector(&backend, &selector)?;
     backend
         .place_window_fullscreen(window_id, &output_name)
         .map_err(|error| error.to_string())
 }
 
 fn run_configure_command(options: CliOptions) -> Result<(), String> {
-    let window_id = options
-        .window_id
-        .ok_or_else(|| "--window is required".to_string())?;
+    let selector = required_window_selector(&options)?;
 
     if options.geometry_change.is_empty() {
         return Err("at least one of --x, --y, --width, or --height is required".to_string());
     }
 
     let backend = build_backend(&options.backend_name)?;
+    let window_id = resolve_window_selector(&backend, &selector)?;
     backend
         .configure_window(window_id, &options.geometry_change)
         .map_err(|error| error.to_string())
+}
+
+fn required_window_selector(options: &CliOptions) -> Result<WindowSelector, String> {
+    options.window_selector.clone().ok_or_else(|| {
+        "--window, --window-title, --window-class, or --window-instance is required".to_string()
+    })
+}
+
+fn resolve_window_selector(
+    backend: &ConfiguredBackend,
+    selector: &WindowSelector,
+) -> Result<WindowId, String> {
+    match selector {
+        WindowSelector::Id(id) => Ok(*id),
+        WindowSelector::Title(title) => resolve_window_from_list(
+            &backend.windows().map_err(|error| error.to_string())?,
+            selector,
+            title,
+        ),
+        WindowSelector::Class(class_name) => {
+            let windows = backend.windows().map_err(|error| error.to_string())?;
+            resolve_window_from_list(&windows, selector, class_name)
+        }
+        WindowSelector::Instance(instance_name) => {
+            let windows = backend.windows().map_err(|error| error.to_string())?;
+            resolve_window_from_list(&windows, selector, instance_name)
+        }
+    }
+}
+
+fn resolve_window_from_list(
+    windows: &[WindowInfo],
+    selector: &WindowSelector,
+    value: &str,
+) -> Result<WindowId, String> {
+    let matches = windows
+        .iter()
+        .filter(|window| window.mapped && window_matches_selector(window, selector))
+        .collect::<Vec<_>>();
+
+    match matches.as_slice() {
+        [] => Err(format!("window not found: {value}")),
+        [window] => Ok(window.id),
+        _ => Err(ambiguous_window_message(value, &matches)),
+    }
+}
+
+fn window_matches_selector(window: &WindowInfo, selector: &WindowSelector) -> bool {
+    match selector {
+        WindowSelector::Id(id) => window.id == *id,
+        WindowSelector::Title(title) => window.title.as_deref() == Some(title.as_str()),
+        WindowSelector::Class(class_name) => {
+            window.class_name.as_deref() == Some(class_name.as_str())
+        }
+        WindowSelector::Instance(instance_name) => {
+            window.instance_name.as_deref() == Some(instance_name.as_str())
+        }
+    }
+}
+
+fn ambiguous_window_message(value: &str, windows: &[&WindowInfo]) -> String {
+    let mut message = format!("window selector is ambiguous: {value}");
+
+    for window in windows {
+        message.push_str(&format!(
+            "\n- {} title=\"{}\" class=\"{}\" instance=\"{}\"",
+            window.id,
+            escape_report_value(window.title.as_deref().unwrap_or("")),
+            escape_report_value(window.class_name.as_deref().unwrap_or("")),
+            escape_report_value(window.instance_name.as_deref().unwrap_or(""))
+        ));
+    }
+
+    message
 }
 
 fn modes_report(output_name: &str, modes: &[OutputMode]) -> String {
@@ -540,8 +649,8 @@ fn handle_command_result(
 
 #[cfg(test)]
 mod tests {
-    use super::{run, CliExit};
-    use crate::OutputMode;
+    use super::{run, CliExit, WindowSelector};
+    use crate::{OutputMode, Rect, WindowId, WindowInfo};
 
     #[test]
     fn reports_usage_errors_for_unknown_arguments() {
@@ -805,7 +914,36 @@ mod tests {
         assert!(stdout.is_empty());
         assert_eq!(
             String::from_utf8_lossy(&stderr),
-            "--window is required\ntry --help\n"
+            "--window, --window-title, --window-class, or --window-instance is required\ntry --help\n"
+        );
+    }
+
+    #[test]
+    fn rejects_multiple_window_selectors() {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let exit = run(
+            [
+                "raise",
+                "--window",
+                "0x800003",
+                "--window-class",
+                "Gnome-terminal",
+            ],
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            concat!(
+                "--window, --window-title, --window-class, and --window-instance are mutually exclusive\n",
+                "try --help\n",
+            )
         );
     }
 
@@ -900,7 +1038,7 @@ mod tests {
         assert!(stdout.is_empty());
         assert_eq!(
             String::from_utf8_lossy(&stderr),
-            "--window is required\ntry --help\n"
+            "--window, --window-title, --window-class, or --window-instance is required\ntry --help\n"
         );
 
         stderr.clear();
@@ -997,5 +1135,84 @@ mod tests {
             Ok(crate::WindowId(0x800003))
         );
         assert!(super::parse_window_id("not-a-window").is_err());
+    }
+
+    #[test]
+    fn resolves_windows_by_exact_title_class_or_instance() {
+        let windows = selector_test_windows();
+
+        assert_eq!(
+            super::resolve_window_from_list(
+                &windows,
+                &WindowSelector::Title("Terminal".to_string()),
+                "Terminal",
+            ),
+            Ok(WindowId(0x10))
+        );
+        assert_eq!(
+            super::resolve_window_from_list(
+                &windows,
+                &WindowSelector::Class("Code".to_string()),
+                "Code",
+            ),
+            Ok(WindowId(0x20))
+        );
+        assert_eq!(
+            super::resolve_window_from_list(
+                &windows,
+                &WindowSelector::Instance("code".to_string()),
+                "code",
+            ),
+            Ok(WindowId(0x20))
+        );
+    }
+
+    #[test]
+    fn reports_missing_or_ambiguous_window_selectors() {
+        let windows = selector_test_windows();
+
+        assert_eq!(
+            super::resolve_window_from_list(
+                &windows,
+                &WindowSelector::Class("Missing".to_string()),
+                "Missing",
+            ),
+            Err("window not found: Missing".to_string())
+        );
+
+        let error = super::resolve_window_from_list(
+            &windows,
+            &WindowSelector::Class("Firefox".to_string()),
+            "Firefox",
+        )
+        .expect_err("selector should be ambiguous");
+
+        assert!(error.contains("window selector is ambiguous: Firefox"));
+        assert!(error.contains("0x30"));
+        assert!(error.contains("0x40"));
+    }
+
+    fn selector_test_windows() -> Vec<WindowInfo> {
+        let mut terminal = WindowInfo::mapped(WindowId(0x10), Rect::new(0, 0, 800, 600));
+        terminal.title = Some("Terminal".to_string());
+        terminal.class_name = Some("Gnome-terminal".to_string());
+        terminal.instance_name = Some("gnome-terminal-server".to_string());
+
+        let mut code = WindowInfo::mapped(WindowId(0x20), Rect::new(0, 0, 800, 600));
+        code.title = Some("main.rs".to_string());
+        code.class_name = Some("Code".to_string());
+        code.instance_name = Some("code".to_string());
+
+        let mut firefox = WindowInfo::mapped(WindowId(0x30), Rect::new(0, 0, 800, 600));
+        firefox.title = Some("Docs".to_string());
+        firefox.class_name = Some("Firefox".to_string());
+        firefox.instance_name = Some("firefox".to_string());
+
+        let mut second_firefox = WindowInfo::mapped(WindowId(0x40), Rect::new(0, 0, 800, 600));
+        second_firefox.title = Some("Mail".to_string());
+        second_firefox.class_name = Some("Firefox".to_string());
+        second_firefox.instance_name = Some("firefox".to_string());
+
+        vec![terminal, code, firefox, second_firefox]
     }
 }

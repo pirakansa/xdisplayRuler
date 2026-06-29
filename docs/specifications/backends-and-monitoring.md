@@ -23,6 +23,7 @@ The current X11 backend collects an initial snapshot:
 - root-level viewable windows
 - root-level window geometry
 - root-level window titles from `_NET_WM_NAME`, falling back to `WM_NAME`
+- root-level `WM_CLASS` instance and class names
 - current input focus
 
 After the initial snapshot, the X11 backend subscribes to RANDR and root-window

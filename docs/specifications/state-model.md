@@ -33,15 +33,17 @@ and clears its primary flag.
 - X11 window ID
 - optional title
 - optional application ID
+- optional class name
+- optional instance name
 - geometry
 - mapped flag
 
 Mapped windows can be raised into the stacking order. Unmapping a window removes
 it from the stacking order and clears focus when that window was focused.
 
-Snapshot reports include the title on a window row only when a title is present.
-The report escapes quotes, backslashes, and control characters in the title
-value.
+Snapshot reports include the title, class name, and instance name on a window
+row only when those values are present. The report escapes quotes, backslashes,
+and control characters in those values.
 
 ## Events
 

@@ -26,6 +26,12 @@ The binary is named `xdisplay-ruler`.
 - `--fullscreen`: place the selected window fullscreen on the selected output.
 - `--window ID`: select an X11 window ID for `place`, `configure`, `raise`, or
   `lower`. Hex values such as `0x800003` and decimal values are accepted.
+- `--window-title NAME`: select a window by exact X11 window title for `place`,
+  `configure`, `raise`, or `lower`.
+- `--window-class NAME`: select a window by exact `WM_CLASS` class name for
+  `place`, `configure`, `raise`, or `lower`.
+- `--window-instance NAME`: select a window by exact `WM_CLASS` instance name
+  for `place`, `configure`, `raise`, or `lower`.
 - `--x N`: set the selected window X position for `configure`. The value must
   be an integer.
 - `--y N`: set the selected window Y position for `configure`. The value must
@@ -54,8 +60,9 @@ top: none
 
 The backend label is `x11` or `in-memory`.
 
-Window rows include `title="..."` when the backend reports a window title.
-Quotes, backslashes, and control characters are escaped in the title value.
+Window rows include `title="..."`, `class="..."`, and `instance="..."` when the
+backend reports the X11 window title or `WM_CLASS` values. Quotes, backslashes,
+and control characters are escaped in these values.
 
 ## Modes Output
 
@@ -93,5 +100,13 @@ rotation, and output list. It does not create custom modelines.
 `place` currently requires `--fullscreen`. It uses the selected output geometry,
 configures the target window to that rectangle, and raises the window.
 
-`configure` requires `--window` and at least one of `--x`, `--y`, `--width`, or
-`--height`. It only sends the geometry fields that were provided.
+`place`, `configure`, `raise`, and `lower` require exactly one window selector:
+`--window`, `--window-title`, `--window-class`, or `--window-instance`. Name
+selectors match exactly and only consider mapped windows. If a selector matches
+no windows, the command returns `window not found: NAME`. If a selector matches
+multiple windows, the command returns `window selector is ambiguous: NAME` with
+candidate IDs and window metadata. In ambiguous cases, rerun the command with
+`--window ID` to select a specific candidate.
+
+`configure` requires at least one of `--x`, `--y`, `--width`, or `--height`. It
+only sends the geometry fields that were provided.

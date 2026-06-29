@@ -104,9 +104,22 @@ impl DisplayState {
                 let title = window
                     .title
                     .as_deref()
-                    .map(window_title_report)
+                    .map(|title| window_property_report("title", title))
                     .unwrap_or_default();
-                format!("- {}: {} {}{}\n", window.id, mapped, window.geometry, title)
+                let class = window
+                    .class_name
+                    .as_deref()
+                    .map(|class| window_property_report("class", class))
+                    .unwrap_or_default();
+                let instance = window
+                    .instance_name
+                    .as_deref()
+                    .map(|instance| window_property_report("instance", instance))
+                    .unwrap_or_default();
+                format!(
+                    "- {}: {} {}{}{}{}\n",
+                    window.id, mapped, window.geometry, title, class, instance
+                )
             })
             .collect()
     }
@@ -192,12 +205,12 @@ impl DisplayState {
     }
 }
 
-fn window_title_report(title: &str) -> String {
-    if title.is_empty() {
+fn window_property_report(name: &str, value: &str) -> String {
+    if value.is_empty() {
         return String::new();
     }
 
-    format!(" title=\"{}\"", escape_report_value(title))
+    format!(" {name}=\"{}\"", escape_report_value(value))
 }
 
 fn escape_report_value(value: &str) -> String {
@@ -266,16 +279,20 @@ mod tests {
     }
 
     #[test]
-    fn status_report_includes_escaped_window_title_when_present() {
+    fn status_report_includes_escaped_window_properties_when_present() {
         let mut state = DisplayState::new();
         let mut window = WindowInfo::mapped(WindowId(0x20), Rect::new(0, 0, 800, 600));
         window.title = Some("hello \"display\"\n".to_string());
+        window.class_name = Some("Code".to_string());
+        window.instance_name = Some("code".to_string());
 
         state.apply(DisplayEvent::WindowMapped(window));
 
         assert!(state
             .status_report()
-            .contains("- 0x20: mapped 800x600+0+0 title=\"hello \\\"display\\\"\\n\""));
+            .contains(
+                "- 0x20: mapped 800x600+0+0 title=\"hello \\\"display\\\"\\n\" class=\"Code\" instance=\"code\""
+            ));
     }
 
     #[test]

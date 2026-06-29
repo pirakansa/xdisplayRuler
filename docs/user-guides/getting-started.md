@@ -78,7 +78,7 @@ output. It does not create custom modelines.
 
 ## Change Window Stacking
 
-Use the window IDs from an X11 snapshot:
+Use the window metadata from an X11 snapshot:
 
 ```bash
 xdisplay-ruler snapshot --backend x11
@@ -87,14 +87,18 @@ xdisplay-ruler snapshot --backend x11
 Raise a window above its siblings:
 
 ```bash
-xdisplay-ruler raise --window 0x800003
+xdisplay-ruler raise --window-class Gnome-terminal
 ```
 
 Lower a window below its siblings:
 
 ```bash
-xdisplay-ruler lower --window 0x800003
+xdisplay-ruler lower --window-class Gnome-terminal
 ```
+
+`--window-class` uses the exact `WM_CLASS` class name printed as `class="..."`
+in the snapshot. If several mapped windows have the same class, the command
+prints the matching IDs so you can rerun it with `--window 0x...`.
 
 These commands use low-level X11 stacking requests. They do not require a window
 manager, but they require the target application window to accept normal X11
@@ -105,19 +109,19 @@ configuration requests.
 Move a window without changing its size:
 
 ```bash
-xdisplay-ruler configure --window 0x800003 --x 0 --y 0
+xdisplay-ruler configure --window-class Gnome-terminal --x 0 --y 0
 ```
 
 Resize a window without changing its position:
 
 ```bash
-xdisplay-ruler configure --window 0x800003 --width 480 --height 260
+xdisplay-ruler configure --window-class Gnome-terminal --width 480 --height 260
 ```
 
 Move and resize in one request:
 
 ```bash
-xdisplay-ruler configure --window 0x800003 --x 0 --y 0 --width 480 --height 260
+xdisplay-ruler configure --window-class Gnome-terminal --x 0 --y 0 --width 480 --height 260
 ```
 
 `configure` requires at least one geometry option. Width and height must be
@@ -134,7 +138,7 @@ xdisplay-ruler snapshot
 Place a window fullscreen on an output:
 
 ```bash
-xdisplay-ruler place --window 0x800003 --output HDMI-2 --fullscreen
+xdisplay-ruler place --window-class Gnome-terminal --output HDMI-2 --fullscreen
 ```
 
 The current `place` command supports fullscreen placement only. It moves and

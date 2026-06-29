@@ -33,22 +33,22 @@ The explicit X11 backend form is equivalent:
 xdisplay-ruler snapshot --backend x11
 ```
 
-Raise a window from the X11 snapshot:
+Raise a window by `WM_CLASS` class name:
 
 ```bash
-xdisplay-ruler raise --window 0x800003
+xdisplay-ruler raise --window-class Gnome-terminal
 ```
 
 Place a window fullscreen on an output:
 
 ```bash
-xdisplay-ruler place --window 0x800003 --output HDMI-2 --fullscreen
+xdisplay-ruler place --window-class Gnome-terminal --output HDMI-2 --fullscreen
 ```
 
 Move or resize a window:
 
 ```bash
-xdisplay-ruler configure --window 0x800003 --x 0 --y 0 --width 480 --height 260
+xdisplay-ruler configure --window-class Gnome-terminal --x 0 --y 0 --width 480 --height 260
 ```
 
 ## Development Setup
