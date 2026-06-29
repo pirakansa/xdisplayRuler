@@ -174,11 +174,11 @@ pub(super) fn screen_size_for_bounds(bounds: &[ScreenBounds]) -> io::Result<Scre
 #[cfg(test)]
 mod tests {
     use super::{
-        mode_infos, output_rotation_to_randr, refresh_millihertz, requested_mode_size,
-        screen_size_for_bounds, selected_output_rotation, transformed_mode_size, ScreenBounds,
-        ScreenSize, X11ModeInfo,
+        mode_infos, mode_not_found_message, output_rotation_to_randr, refresh_millihertz,
+        requested_mode_size, screen_size_for_bounds, selected_output_rotation,
+        transformed_mode_size, ScreenBounds, ScreenSize, X11ModeInfo,
     };
-    use crate::OutputRotation;
+    use crate::{OutputModeSelection, OutputRotation};
     use x11rb::protocol::randr::{GetScreenResourcesCurrentReply, ModeFlag, ModeInfo, Rotation};
 
     #[test]
@@ -315,6 +315,28 @@ mod tests {
         assert_eq!(
             requested_mode_size(1920, 1080, Rotation::ROTATE180),
             (1920, 1080)
+        );
+    }
+
+    #[test]
+    fn describes_missing_output_modes_with_requested_size_and_rate() {
+        assert_eq!(
+            mode_not_found_message(&OutputModeSelection {
+                width: Some(1920),
+                height: Some(1080),
+                refresh_millihertz: Some(59_940),
+                rotation: None,
+            }),
+            "output mode not found: 1920x1080 at 59.94Hz"
+        );
+        assert_eq!(
+            mode_not_found_message(&OutputModeSelection {
+                width: None,
+                height: None,
+                refresh_millihertz: None,
+                rotation: Some(OutputRotation::Left),
+            }),
+            "output mode not found: active mode"
         );
     }
 

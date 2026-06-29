@@ -136,6 +136,43 @@ fn dry_run_enforce_exits_after_printing_plan() {
 }
 
 #[test]
+fn once_enforce_reports_unresolved_rules_as_usage_errors() {
+    let layout_path = write_temp_layout(
+        r#"{
+                "schema_version": 1,
+                "windows": [
+                    { "selector": { "app_id": "Player" }, "output": "HDMI-2" }
+                ]
+            }"#,
+    );
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+
+    let exit = run(
+        [
+            "enforce",
+            "--backend",
+            "in-memory",
+            "--layout",
+            layout_path.to_str().expect("temp path should be UTF-8"),
+            "--once",
+        ],
+        &mut stdout,
+        &mut stderr,
+    )
+    .expect("cli should run");
+
+    assert_eq!(exit, CliExit::UsageError);
+    assert!(stdout.is_empty());
+    assert_eq!(
+        String::from_utf8_lossy(&stderr),
+        "window not found: app_id:\"Player\"\ntry --help\n"
+    );
+
+    fs::remove_file(layout_path).expect("temp layout should be removable");
+}
+
+#[test]
 fn limits_watch_iterations() {
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();

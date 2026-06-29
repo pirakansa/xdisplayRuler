@@ -32,3 +32,36 @@ fn plan_report(plan: &EnforcementPlan) -> String {
 
     report
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{layout::WindowSelector, EnforcementPlan, LayoutOperation, Rect, WindowId};
+
+    use super::write_dry_run_report;
+
+    #[test]
+    fn dry_run_report_includes_planned_operations() {
+        let plan = EnforcementPlan {
+            operations: vec![LayoutOperation::ConfigureWindow {
+                id: WindowId(0x20),
+                selector: WindowSelector::AppId("Player".to_string()),
+                output: "HDMI-2".to_string(),
+                geometry: Rect::new(0, 0, 1920, 1080),
+            }],
+            warnings: Vec::new(),
+        };
+        let mut stdout = Vec::new();
+
+        write_dry_run_report(&plan, &mut stdout).expect("dry-run report should render");
+
+        assert_eq!(
+            String::from_utf8_lossy(&stdout),
+            concat!(
+                "xdisplay-ruler enforce dry-run\n",
+                "operations: 1\n",
+                "- configure 0x20 selector=app_id:\"Player\" ",
+                "output=\"HDMI-2\" geometry=1920x1080+0+0\n",
+            )
+        );
+    }
+}
