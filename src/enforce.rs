@@ -1,9 +1,14 @@
 use std::{io::Write, thread, time::Duration};
 
-use crate::{
-    build_enforcement_plan, ConfiguredBackend, DisplayState, EnforcementMode, EnforcementPlan,
-    LayoutOperation, LayoutPolicy,
-};
+use crate::ConfiguredBackend;
+
+mod executor;
+mod planner;
+mod report;
+
+use executor::apply_plan;
+use planner::EnforcementSession;
+use report::{write_dry_run_report, write_warnings};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct EnforceOptions {
@@ -14,99 +19,72 @@ pub(crate) struct EnforceOptions {
     pub(crate) interval_millis: usize,
 }
 
+impl EnforceOptions {
+    fn single_cycle_mode(&self) -> Option<EnforceCycleMode> {
+        if self.dry_run {
+            Some(EnforceCycleMode::DryRun)
+        } else if self.once {
+            Some(EnforceCycleMode::ApplyOnce)
+        } else {
+            None
+        }
+    }
+
+    fn loop_interval(&self) -> Duration {
+        Duration::from_millis(self.interval_millis as u64)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum EnforceCycleMode {
+    DryRun,
+    ApplyOnce,
+}
+
 pub(crate) fn run(
     options: EnforceOptions,
     stdout: &mut impl Write,
     stderr: &mut impl Write,
     build_backend: impl Fn(&str) -> Result<ConfiguredBackend, String>,
 ) -> Result<(), String> {
-    let policy =
-        LayoutPolicy::read_from_path(&options.layout_path).map_err(|error| error.to_string())?;
-    let mut backend = build_backend(&options.backend_name)?;
-    let mut state = DisplayState::new();
+    let single_cycle_mode = options.single_cycle_mode();
+    let loop_interval = options.loop_interval();
+    let mut session = EnforcementSession::new(&options, build_backend)?;
 
-    if options.dry_run || options.once {
-        let mode = if options.once {
-            EnforcementMode::Once
-        } else {
-            EnforcementMode::Daemon
-        };
-        let plan = plan_cycle(&mut backend, &mut state, &policy, mode)?;
-        write_warnings(&plan, stderr)?;
-
-        if options.dry_run {
-            write!(stdout, "{}", plan_report(&plan)).map_err(|error| error.to_string())?;
-        } else {
-            apply_plan(&backend, &plan)?;
-        }
-
-        return Ok(());
+    if let Some(mode) = single_cycle_mode {
+        run_single_cycle(&mut session, mode, stdout, stderr)
+    } else {
+        run_daemon(&mut session, loop_interval, stderr)
     }
+}
 
+fn run_single_cycle(
+    session: &mut EnforcementSession,
+    mode: EnforceCycleMode,
+    stdout: &mut impl Write,
+    stderr: &mut impl Write,
+) -> Result<(), String> {
+    let plan = match mode {
+        EnforceCycleMode::DryRun => session.build_recoverable_plan()?,
+        EnforceCycleMode::ApplyOnce => session.build_strict_plan()?,
+    };
+    write_warnings(&plan, stderr)?;
+
+    match mode {
+        EnforceCycleMode::DryRun => write_dry_run_report(&plan, stdout),
+        EnforceCycleMode::ApplyOnce => apply_plan(session.backend(), &plan),
+    }
+}
+
+fn run_daemon(
+    session: &mut EnforcementSession,
+    interval: Duration,
+    stderr: &mut impl Write,
+) -> Result<(), String> {
     loop {
-        let plan = plan_cycle(&mut backend, &mut state, &policy, EnforcementMode::Daemon)?;
+        let plan = session.build_recoverable_plan()?;
         write_warnings(&plan, stderr)?;
-        apply_plan(&backend, &plan)?;
-        thread::sleep(Duration::from_millis(options.interval_millis as u64));
+        apply_plan(session.backend(), &plan)?;
+        thread::sleep(interval);
     }
-}
-
-fn plan_cycle(
-    backend: &mut ConfiguredBackend,
-    state: &mut DisplayState,
-    policy: &LayoutPolicy,
-    mode: EnforcementMode,
-) -> Result<EnforcementPlan, String> {
-    let events = backend
-        .snapshot_events()
-        .map_err(|error| error.to_string())?;
-    for event in events {
-        state.apply(event);
-    }
-
-    build_enforcement_plan(policy, state, mode).map_err(|error| error.to_string())
-}
-
-fn apply_plan(backend: &ConfiguredBackend, plan: &EnforcementPlan) -> Result<(), String> {
-    for operation in &plan.operations {
-        match operation {
-            LayoutOperation::ConfigureWindow { id, .. } => {
-                let change = operation
-                    .geometry_change()
-                    .expect("configure operation should have geometry");
-                backend
-                    .configure_window(*id, &change)
-                    .map_err(|error| error.to_string())?;
-            }
-            LayoutOperation::RaiseWindow { id, .. } => backend
-                .raise_window(*id)
-                .map_err(|error| error.to_string())?,
-            LayoutOperation::StackWindowAbove { id, sibling, .. } => backend
-                .stack_window_above(*id, *sibling)
-                .map_err(|error| error.to_string())?,
-        }
-    }
-
-    Ok(())
-}
-
-fn write_warnings(plan: &EnforcementPlan, stderr: &mut impl Write) -> Result<(), String> {
-    for warning in &plan.warnings {
-        writeln!(stderr, "warning: {warning}").map_err(|error| error.to_string())?;
-    }
-
-    Ok(())
-}
-
-fn plan_report(plan: &EnforcementPlan) -> String {
-    let mut report = format!(
-        "xdisplay-ruler enforce dry-run\noperations: {}\n",
-        plan.operations.len()
-    );
-
-    for operation in &plan.operations {
-        report.push_str(&format!("- {operation}\n"));
-    }
-
-    report
 }
