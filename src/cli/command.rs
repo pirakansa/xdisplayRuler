@@ -2,6 +2,7 @@ use std::io::{self, Write};
 
 use crate::{
     enforce::{self, EnforceOptions},
+    report::escape_value,
     BackendError, ConfiguredBackend, DisplayMonitor, OutputModeChange, OutputModeSelection,
     WindowId, WindowInfo,
 };
@@ -216,22 +217,13 @@ fn ambiguous_window_message(value: &str, windows: &[&WindowInfo]) -> String {
         message.push_str(&format!(
             "\n- {} title=\"{}\" class=\"{}\" instance=\"{}\"",
             window.id,
-            escape_report_value(window.title.as_deref().unwrap_or("")),
-            escape_report_value(window.class_name.as_deref().unwrap_or("")),
-            escape_report_value(window.instance_name.as_deref().unwrap_or(""))
+            escape_value(window.title.as_deref().unwrap_or("")),
+            escape_value(window.class_name.as_deref().unwrap_or("")),
+            escape_value(window.instance_name.as_deref().unwrap_or(""))
         ));
     }
 
     message
-}
-
-fn escape_report_value(value: &str) -> String {
-    value
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
-        .replace('\t', "\\t")
 }
 
 fn build_backend(name: &str) -> Result<ConfiguredBackend, String> {

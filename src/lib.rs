@@ -4,6 +4,7 @@ mod enforce;
 pub mod layout;
 pub mod models;
 pub mod monitor;
+mod report;
 pub mod state;
 
 pub use backend::{

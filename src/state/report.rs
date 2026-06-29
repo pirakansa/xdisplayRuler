@@ -1,3 +1,5 @@
+use crate::report::escape_value;
+
 use super::DisplayState;
 
 impl DisplayState {
@@ -79,14 +81,5 @@ fn window_property_report(name: &str, value: &str) -> String {
         return String::new();
     }
 
-    format!(" {name}=\"{}\"", escape_report_value(value))
-}
-
-fn escape_report_value(value: &str) -> String {
-    value
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
-        .replace('\t', "\\t")
+    format!(" {name}=\"{}\"", escape_value(value))
 }

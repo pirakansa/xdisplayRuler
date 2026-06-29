@@ -2,7 +2,7 @@ use std::{fmt, fs, path::Path};
 
 use serde::Deserialize;
 
-use crate::WindowId;
+use crate::{report::escape_value, WindowId};
 
 const SUPPORTED_SCHEMA_VERSION: u32 = 1;
 
@@ -62,8 +62,8 @@ impl fmt::Display for WindowSelector {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Id(id) => write!(formatter, "id:{id}"),
-            Self::Title(title) => write!(formatter, "title:\"{}\"", escape_report_value(title)),
-            Self::AppId(app_id) => write!(formatter, "app_id:\"{}\"", escape_report_value(app_id)),
+            Self::Title(title) => write!(formatter, "title:\"{}\"", escape_value(title)),
+            Self::AppId(app_id) => write!(formatter, "app_id:\"{}\"", escape_value(app_id)),
         }
     }
 }
@@ -160,13 +160,4 @@ fn parse_window_id(value: &str) -> Result<WindowId, String> {
         .map_err(|_| format!("id must be an X11 window id, got: {value}"))?;
 
     Ok(WindowId(parsed))
-}
-
-fn escape_report_value(value: &str) -> String {
-    value
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
-        .replace('\t', "\\t")
 }

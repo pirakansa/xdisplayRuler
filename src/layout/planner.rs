@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::{DisplayState, Rect, WindowGeometryChange, WindowId, WindowInfo};
+use crate::{report::escape_value, DisplayState, Rect, WindowGeometryChange, WindowId, WindowInfo};
 
 use super::policy::{
     LayoutError, LayoutPolicy, ManagedWindowRule, UnmanagedWindowsPolicy, WindowSelector,
@@ -100,7 +100,7 @@ impl fmt::Display for LayoutOperation {
             } => write!(
                 formatter,
                 "configure {id} selector={selector} output=\"{}\" geometry={geometry}",
-                escape_report_value(output)
+                escape_value(output)
             ),
             Self::RaiseWindow { id, selector } => {
                 write!(formatter, "raise {id} selector={selector}")
@@ -253,13 +253,4 @@ fn allow_above_stack_operations(
             }
         })
         .collect()
-}
-
-fn escape_report_value(value: &str) -> String {
-    value
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
-        .replace('\t', "\\t")
 }

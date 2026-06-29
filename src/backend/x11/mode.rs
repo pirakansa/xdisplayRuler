@@ -2,7 +2,7 @@ use std::io;
 
 use x11rb::protocol::randr;
 
-use crate::{OutputModeSelection, OutputRotation};
+use crate::{report::format_millihertz, OutputModeSelection, OutputRotation};
 
 use super::types::{ScreenBounds, ScreenSize, X11ModeInfo};
 
@@ -76,7 +76,7 @@ pub(super) fn refresh_matches(actual: Option<u32>, expected: Option<u32>) -> boo
 pub(super) fn mode_not_found_message(selection: &OutputModeSelection) -> String {
     let rate = selection
         .refresh_millihertz
-        .map(|rate| format!(" at {}", format_refresh_millihertz(rate)))
+        .map(|rate| format!(" at {}", format_millihertz(rate)))
         .unwrap_or_default();
     let size = match (selection.width, selection.height) {
         (Some(width), Some(height)) => format!("{width}x{height}"),
@@ -169,21 +169,6 @@ pub(super) fn screen_size_for_bounds(bounds: &[ScreenBounds]) -> io::Result<Scre
         width: width as u16,
         height: height as u16,
     })
-}
-
-fn format_refresh_millihertz(refresh_millihertz: u32) -> String {
-    let hz = refresh_millihertz / 1000;
-    let fraction = refresh_millihertz % 1000;
-
-    if fraction == 0 {
-        format!("{hz}Hz")
-    } else {
-        let mut fraction = format!("{fraction:03}");
-        while fraction.ends_with('0') {
-            fraction.pop();
-        }
-        format!("{hz}.{fraction}Hz")
-    }
 }
 
 #[cfg(test)]
