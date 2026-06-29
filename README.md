@@ -86,11 +86,16 @@ vorbere run build
 
 ## Project Structure
 
-- `src/cli.rs`: CLI argument handling
+- `src/cli/mod.rs`: CLI entrypoint and exit mapping
+- `src/cli/help.rs`: static help text
+- `src/cli/options.rs`: option parsing and value validation
+- `src/cli/command.rs`: backend-facing command execution
+- `src/cli/report.rs`: user-facing text rendering for CLI reports
 - `src/lib.rs`: public module exports
 - `src/main.rs`: binary entry point
 - `src/models/`: display and window data types
 - `src/state.rs`: display state reducer and reporting
-- `docs/`: user guides and specification references
+- `docs/user-guides/`: task-oriented usage guides
+- `docs/specifications/`: behavior and contract references
 - `tests/`: smoke tests for the compiled binary
 - `vorbere.yaml`: local development tasks

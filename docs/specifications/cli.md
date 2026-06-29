@@ -10,6 +10,14 @@ The binary is named `xdisplay-ruler`.
 - Layout command: enforce a JSON layout for managed kiosk windows.
 - Other commands: print help or version information.
 
+## Implementation Layout
+
+- `src/cli/mod.rs`: top-level CLI flow, help/version fast paths, and exit mapping.
+- `src/cli/help.rs`: the user-facing help document embedded in the binary.
+- `src/cli/options.rs`: command selection, argument parsing, and scalar validation.
+- `src/cli/command.rs`: backend construction, selector resolution, and side-effecting commands.
+- `src/cli/report.rs`: human-readable mode listing output and escaping rules.
+
 ## Commands
 
 - No arguments: run the default `snapshot` command with the X11 backend.
