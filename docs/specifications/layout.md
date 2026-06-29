@@ -86,7 +86,8 @@ Unmanaged windows are mapped windows that do not match any layout rule.
 Supported policies:
 
 - `allow_above`: default. The enforce plan maintains managed window geometry
-  but does not raise managed windows over unknown windows.
+  and corrects the relative stacking order of managed windows with sibling
+  stack operations. It does not raise the managed group over unknown windows.
 - `keep_below_managed`: raises managed windows in layout array order after
   geometry changes, placing later rules above earlier rules.
 
@@ -101,9 +102,10 @@ Each enforce cycle:
 3. Resolves each rule output against connected outputs.
 4. Plans a `ConfigureWindow` operation when the current window geometry differs
    from the output geometry.
-5. Adds `RaiseWindow` operations in layout order only when
-   `unmanaged_windows` is `keep_below_managed`.
-6. Applies the planned operations unless `--dry-run` was used.
+5. For `allow_above`, plans sibling stack operations when managed windows are
+   not in layout order.
+6. For `keep_below_managed`, adds `RaiseWindow` operations in layout order.
+7. Applies the planned operations unless `--dry-run` was used.
 
 ## Error Handling
 

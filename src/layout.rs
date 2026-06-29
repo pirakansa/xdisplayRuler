@@ -61,6 +61,11 @@ pub enum LayoutOperation {
         id: WindowId,
         selector: WindowSelector,
     },
+    StackWindowAbove {
+        id: WindowId,
+        selector: WindowSelector,
+        sibling: WindowId,
+    },
 }
 
 impl LayoutPolicy {
@@ -113,12 +118,29 @@ pub fn build_enforcement_plan(
         }
     }
 
-    if policy.unmanaged_windows == UnmanagedWindowsPolicy::KeepBelowManaged {
-        plan.operations.extend(
-            managed_windows
-                .into_iter()
-                .map(|(id, selector)| LayoutOperation::RaiseWindow { id, selector }),
-        );
+    match policy.unmanaged_windows {
+        UnmanagedWindowsPolicy::AllowAbove => {
+            if !managed_order_matches(state, &managed_windows) {
+                plan.operations
+                    .extend(managed_windows.windows(2).map(|pair| {
+                        let [(sibling, _), (id, selector)] = pair else {
+                            unreachable!("windows(2) returns exactly two items")
+                        };
+                        LayoutOperation::StackWindowAbove {
+                            id: *id,
+                            selector: selector.clone(),
+                            sibling: *sibling,
+                        }
+                    }));
+            }
+        }
+        UnmanagedWindowsPolicy::KeepBelowManaged => {
+            plan.operations.extend(
+                managed_windows
+                    .into_iter()
+                    .map(|(id, selector)| LayoutOperation::RaiseWindow { id, selector }),
+            );
+        }
     }
 
     Ok(plan)
@@ -133,7 +155,7 @@ impl LayoutOperation {
                 width: Some(geometry.width),
                 height: Some(geometry.height),
             }),
-            Self::RaiseWindow { .. } => None,
+            Self::RaiseWindow { .. } | Self::StackWindowAbove { .. } => None,
         }
     }
 }
@@ -154,6 +176,14 @@ impl fmt::Display for LayoutOperation {
             Self::RaiseWindow { id, selector } => {
                 write!(formatter, "raise {id} selector={selector}")
             }
+            Self::StackWindowAbove {
+                id,
+                selector,
+                sibling,
+            } => write!(
+                formatter,
+                "stack-above {id} selector={selector} sibling={sibling}"
+            ),
         }
     }
 }
@@ -328,6 +358,24 @@ fn selector_matches(window: &WindowInfo, selector: &WindowSelector) -> bool {
     }
 }
 
+fn managed_order_matches(
+    state: &DisplayState,
+    managed_windows: &[(WindowId, WindowSelector)],
+) -> bool {
+    let desired = managed_windows
+        .iter()
+        .map(|(id, _)| *id)
+        .collect::<Vec<_>>();
+    let actual = state
+        .stacking_order()
+        .iter()
+        .copied()
+        .filter(|id| desired.contains(id))
+        .collect::<Vec<_>>();
+
+    actual == desired
+}
+
 fn parse_window_id(value: &str) -> Result<WindowId, String> {
     let normalized = value.trim();
     let parsed = normalized
@@ -429,7 +477,13 @@ mod tests {
         let plan = build_enforcement_plan(&layout, &state, EnforcementMode::Once)
             .expect("plan should build");
 
-        assert_eq!(plan.operations.len(), 3);
+        assert_eq!(
+            plan.operations
+                .iter()
+                .filter(|operation| matches!(operation, LayoutOperation::ConfigureWindow { .. }))
+                .count(),
+            3
+        );
     }
 
     #[test]
@@ -525,6 +579,61 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn allow_above_plans_relative_stack_operations_for_managed_windows_only() {
+        let mut state = test_state();
+        state.apply(DisplayEvent::WindowRaised(WindowId(0x10)));
+        let layout = LayoutPolicy::from_json_str(
+            r#"{
+                "schema_version": 1,
+                "windows": [
+                    { "selector": { "app_id": "Player" }, "output": "HDMI-2" },
+                    { "selector": { "title": "Overlay" }, "output": "HDMI-2" }
+                ]
+            }"#,
+        )
+        .expect("layout should parse");
+
+        let plan = build_enforcement_plan(&layout, &state, EnforcementMode::Once)
+            .expect("plan should build");
+
+        assert!(plan.operations.iter().any(|operation| matches!(
+            operation,
+            LayoutOperation::StackWindowAbove {
+                id: WindowId(0x20),
+                sibling: WindowId(0x10),
+                ..
+            }
+        )));
+        assert!(!plan
+            .operations
+            .iter()
+            .any(|operation| matches!(operation, LayoutOperation::RaiseWindow { .. })));
+    }
+
+    #[test]
+    fn allow_above_skips_stack_operations_when_managed_order_already_matches() {
+        let state = test_state();
+        let layout = LayoutPolicy::from_json_str(
+            r#"{
+                "schema_version": 1,
+                "windows": [
+                    { "selector": { "app_id": "Player" }, "output": "HDMI-2" },
+                    { "selector": { "title": "Overlay" }, "output": "HDMI-2" }
+                ]
+            }"#,
+        )
+        .expect("layout should parse");
+
+        let plan = build_enforcement_plan(&layout, &state, EnforcementMode::Once)
+            .expect("plan should build");
+
+        assert!(!plan.operations.iter().any(|operation| {
+            matches!(operation, LayoutOperation::StackWindowAbove { .. })
+                || matches!(operation, LayoutOperation::RaiseWindow { .. })
+        }));
     }
 
     #[test]

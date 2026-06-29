@@ -245,8 +245,9 @@ output. `app_id` matches the X11 `WM_CLASS` class name shown as `class="..."`
 in snapshot output.
 
 Use `unmanaged_windows: "allow_above"` when unknown apps are allowed to appear
-above managed windows. Use `keep_below_managed` when managed windows should be
-raised in layout order on each enforce cycle.
+above managed windows. This still keeps managed windows in layout order relative
+to each other. Use `keep_below_managed` when the managed group should also be
+raised above unknown windows on each enforce cycle.
 
 ## Reading Snapshot Output
 

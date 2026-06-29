@@ -91,6 +91,16 @@ impl ConfiguredBackend {
         }
     }
 
+    pub fn stack_window_above(&self, id: WindowId, sibling: WindowId) -> io::Result<()> {
+        match self {
+            Self::InMemory(_) => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "in-memory backend cannot change X11 window stacking",
+            )),
+            Self::X11(backend) => backend.stack_window_above(id, sibling),
+        }
+    }
+
     pub fn place_window_fullscreen(&self, id: WindowId, output_name: &str) -> io::Result<()> {
         match self {
             Self::InMemory(_) => Err(io::Error::new(

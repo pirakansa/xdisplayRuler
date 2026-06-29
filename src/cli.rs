@@ -600,6 +600,9 @@ fn apply_enforcement_plan(
             LayoutOperation::RaiseWindow { id, .. } => backend
                 .raise_window(*id)
                 .map_err(|error| error.to_string())?,
+            LayoutOperation::StackWindowAbove { id, sibling, .. } => backend
+                .stack_window_above(*id, *sibling)
+                .map_err(|error| error.to_string())?,
         }
     }
 

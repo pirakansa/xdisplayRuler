@@ -469,6 +469,21 @@ impl X11Backend {
         self.stack_window(id, StackMode::BELOW)
     }
 
+    pub fn stack_window_above(&self, id: WindowId, sibling: WindowId) -> io::Result<()> {
+        let window = x11_window_id(id)?;
+        let sibling = x11_window_id(sibling)?;
+        let changes = ConfigureWindowAux::new()
+            .sibling(sibling)
+            .stack_mode(StackMode::ABOVE);
+
+        self.connection
+            .configure_window(window, &changes)
+            .map_err(to_io_error)?
+            .check()
+            .map_err(to_io_error)?;
+        self.connection.flush().map_err(to_io_error)
+    }
+
     pub fn place_window_fullscreen(&self, id: WindowId, output_name: &str) -> io::Result<()> {
         let output = self
             .output_snapshots()?
