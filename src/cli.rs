@@ -8,17 +8,40 @@ use crate::{
 const HELP: &str = "\
 xdisplay-ruler
 
+Overview:
+  Inspect Xorg display state, list or change RandR output modes, and send
+  low-level X11 requests to move, resize, raise, lower, or place windows.
+
+Quick Start:
+  xdisplay-ruler
+  xdisplay-ruler snapshot --backend x11
+  xdisplay-ruler raise --window-class Gnome-terminal
+
 Usage:
-  xdisplay-ruler [snapshot] [--backend x11]
-  xdisplay-ruler watch [--backend x11] [--iterations N]
-  xdisplay-ruler modes --output NAME [--backend x11]
-  xdisplay-ruler mode --output NAME --width N --height N [--rate HZ] [--backend x11]
-  xdisplay-ruler place WINDOW_SELECTOR --output NAME --fullscreen [--backend x11]
-  xdisplay-ruler configure WINDOW_SELECTOR [--x N] [--y N] [--width N] [--height N] [--backend x11]
-  xdisplay-ruler raise WINDOW_SELECTOR [--backend x11]
-  xdisplay-ruler lower WINDOW_SELECTOR [--backend x11]
-  xdisplay-ruler --help
-  xdisplay-ruler --version
+  Snapshot:
+    xdisplay-ruler [snapshot] [--backend NAME]
+    xdisplay-ruler watch [--backend NAME] [--iterations N]
+
+  Output Modes:
+    xdisplay-ruler modes --output NAME [--backend x11]
+    xdisplay-ruler mode --output NAME --width N --height N [--rate HZ] [--backend x11]
+
+  Window Control:
+    xdisplay-ruler raise WINDOW_SELECTOR [--backend x11]
+    xdisplay-ruler lower WINDOW_SELECTOR [--backend x11]
+    xdisplay-ruler configure WINDOW_SELECTOR [--x N] [--y N] [--width N] [--height N] [--backend x11]
+    xdisplay-ruler place WINDOW_SELECTOR --output NAME --fullscreen [--backend x11]
+
+  Other:
+    xdisplay-ruler --help
+    xdisplay-ruler --version
+
+Window Selector:
+  Use exactly one selector with raise, lower, configure, or place.
+    --window ID             X11 window ID, for example 0x800003.
+    --window-title NAME     Exact X11 window title.
+    --window-class NAME     Exact WM_CLASS class name.
+    --window-instance NAME  Exact WM_CLASS instance name.
 
 Commands:
   snapshot  Print one display-state snapshot. This is the default command.
@@ -30,21 +53,36 @@ Commands:
   raise     Raise a window above its siblings.
   lower     Lower a window below its siblings.
 
-Options:
-  --backend NAME      Backend to use. Supported: x11.
-  --iterations N      Stop watch after N snapshots for tests and diagnostics.
+Global Options:
+  --backend NAME      Backend to use. Supported: x11, xorg, in-memory.
+  --iterations N      Stop watch after N snapshots. Must be positive.
+
+Output Options:
   --output NAME       X11 RandR output name, for example HDMI-2.
   --rate HZ           Refresh rate for mode, for example 60 or 59.94.
-  --fullscreen        Resize and move the window to fill the output.
-  --window ID         X11 window ID as hex, for example 0x800003.
-  --window-title NAME Select a window by exact X11 window title.
-  --window-class NAME Select a window by exact WM_CLASS class name.
-  --window-instance NAME
-                     Select a window by exact WM_CLASS instance name.
+
+Window Options:
+  --fullscreen        Resize and move the selected window to fill the output.
+
+Geometry Options:
   --x N               Window X position for configure.
   --y N               Window Y position for configure.
-  --width N           Window width for configure.
-  --height N          Window height for configure.
+  --width N           Window width for configure. Must be positive.
+  --height N          Window height for configure. Must be positive.
+
+Notes:
+  mode requires --output, --width, and --height. --rate is optional.
+  place requires WINDOW_SELECTOR, --output, and --fullscreen.
+  configure requires WINDOW_SELECTOR and at least one geometry option.
+  Window selector name matches are exact and must identify one mapped window.
+
+Examples:
+  xdisplay-ruler modes --output HDMI-2
+  xdisplay-ruler mode --output HDMI-2 --width 1920 --height 1080 --rate 60
+  xdisplay-ruler raise --window-class Gnome-terminal
+  xdisplay-ruler lower --window 0x800003
+  xdisplay-ruler configure --window-class Gnome-terminal --x 0 --y 0
+  xdisplay-ruler place --window-class Gnome-terminal --output HDMI-2 --fullscreen
 ";
 
 #[derive(Debug, Eq, PartialEq)]
