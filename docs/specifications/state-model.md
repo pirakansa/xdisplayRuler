@@ -1,6 +1,11 @@
 # State Model
 
-The state model is implemented in `src/models/` and `src/state.rs`.
+The state model is implemented in `src/models/` and `src/state/`.
+
+## Implementation Layout
+
+- `src/state/mod.rs`: event application, output/window mutation, stacking order, and focus tracking.
+- `src/state/report.rs`: snapshot-style text rendering for outputs, windows, focus, and top window.
 
 ## Geometry
 

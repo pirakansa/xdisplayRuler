@@ -95,10 +95,12 @@ vorbere run build
 - `src/layout/planner.rs`: enforce planning and stacking policy decisions
 - `src/backend/x11/snapshot.rs`: X11 snapshot collection, window discovery, and event waiting
 - `src/backend/x11/control.rs`: RandR mode changes and X11 window control operations
+- `src/state/mod.rs`: display-state reducer and event application
+- `src/state/report.rs`: human-readable state reporting
 - `src/lib.rs`: public module exports
 - `src/main.rs`: binary entry point
 - `src/models/`: display and window data types
-- `src/state.rs`: display state reducer and reporting
+- `src/state/`: display state reducer, reporting, and tests
 - `docs/user-guides/`: task-oriented usage guides
 - `docs/specifications/`: behavior and contract references
 - `tests/`: smoke tests for the compiled binary
