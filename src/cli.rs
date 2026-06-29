@@ -1,8 +1,8 @@
 use std::io::{self, Write};
 
 use crate::{
-    BackendError, ConfiguredBackend, DisplayMonitor, OutputMode, OutputModeSelection,
-    WindowGeometryChange, WindowId, WindowInfo,
+    BackendError, ConfiguredBackend, DisplayMonitor, OutputMode, OutputModeChange,
+    OutputModeSelection, WindowGeometryChange, WindowId, WindowInfo,
 };
 
 const HELP: &str = "\
@@ -187,7 +187,7 @@ where
         }
         Command::Watch => handle_command_result(run_watch(options, stdout), stderr),
         Command::Modes => handle_command_result(run_modes_command(options, stdout), stderr),
-        Command::Mode => handle_command_result(run_mode_command(options), stderr),
+        Command::Mode => handle_mode_command_result(run_mode_command(options), stderr),
         Command::Place => handle_command_result(run_place_command(options), stderr),
         Command::Configure => handle_command_result(run_configure_command(options), stderr),
         Command::Raise => {
@@ -487,7 +487,7 @@ fn run_modes_command(options: CliOptions, stdout: &mut impl Write) -> Result<(),
     write!(stdout, "{}", modes_report(&output_name, &modes)).map_err(|error| error.to_string())
 }
 
-fn run_mode_command(options: CliOptions) -> Result<(), String> {
+fn run_mode_command(options: CliOptions) -> Result<OutputModeChange, String> {
     let output_name = options
         .output_name
         .ok_or_else(|| "--output is required".to_string())?;
@@ -685,9 +685,29 @@ fn handle_command_result(
     }
 }
 
+fn handle_mode_command_result(
+    result: Result<OutputModeChange, String>,
+    stderr: &mut impl Write,
+) -> io::Result<CliExit> {
+    match result {
+        Ok(change) => {
+            for warning in change.warnings {
+                writeln!(stderr, "warning: {warning}")?;
+            }
+            Ok(CliExit::Success)
+        }
+        Err(message) => {
+            writeln!(stderr, "{message}")?;
+            writeln!(stderr, "try --help")?;
+            Ok(CliExit::UsageError)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{run, CliExit, WindowSelector};
+    use super::{handle_mode_command_result, run, CliExit, WindowSelector};
+    use crate::OutputModeChange;
     use crate::{OutputMode, Rect, WindowId, WindowInfo};
 
     #[test]
@@ -892,6 +912,26 @@ mod tests {
         assert_eq!(
             String::from_utf8_lossy(&stderr),
             "in-memory backend cannot change X11 output modes\ntry --help\n"
+        );
+    }
+
+    #[test]
+    fn mode_command_warnings_keep_success_exit_status() {
+        let mut stderr = Vec::new();
+        let exit = handle_mode_command_result(
+            Ok(OutputModeChange {
+                warnings: vec![
+                    "output mode changed, but touch remapping failed: test failure".to_string(),
+                ],
+            }),
+            &mut stderr,
+        )
+        .expect("mode result should be handled");
+
+        assert_eq!(exit, CliExit::Success);
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "warning: output mode changed, but touch remapping failed: test failure\n"
         );
     }
 

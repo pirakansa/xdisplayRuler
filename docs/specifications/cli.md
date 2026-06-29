@@ -126,6 +126,11 @@ backend because they are real X11 or RandR operations. Selecting
 - `mode` selects from modes already reported by RandR for the output and sends
   `SetCrtcConfig` to the output's active CRTC while preserving the CRTC
   position, rotation, and output list. It does not create custom modelines.
+- After a successful X11 `mode` switch, the backend remaps every enabled
+  XInput touch device to the selected output by updating its
+  `Coordinate Transformation Matrix` from the output rectangle relative to the
+  root window. If this touch remapping fails after RandR accepts the mode
+  switch, the command still succeeds and prints a warning to standard error.
 - `place` currently requires `--fullscreen`. It uses the selected output
   geometry, configures the target window to that rectangle, and raises the
   window.

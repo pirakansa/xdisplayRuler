@@ -39,6 +39,11 @@ pub struct OutputModeSelection {
     pub refresh_millihertz: Option<u32>,
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct OutputModeChange {
+    pub warnings: Vec<String>,
+}
+
 impl WindowGeometryChange {
     pub fn is_empty(&self) -> bool {
         self.x.is_none() && self.y.is_none() && self.width.is_none() && self.height.is_none()
@@ -121,7 +126,7 @@ impl ConfiguredBackend {
         &self,
         output_name: &str,
         selection: &OutputModeSelection,
-    ) -> io::Result<()> {
+    ) -> io::Result<OutputModeChange> {
         match self {
             Self::InMemory(_) => Err(io::Error::new(
                 io::ErrorKind::Unsupported,

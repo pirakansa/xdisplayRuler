@@ -4,9 +4,13 @@ use x11rb::{
     connection::Connection,
     protocol::{
         randr::{self, ConnectionExt as RandrConnectionExt, GetScreenResourcesCurrentReply},
+        xinput::{
+            ConnectionExt as XinputConnectionExt, Device, DeviceClassData, XIChangePropertyAux,
+            XIDeviceInfo,
+        },
         xproto::{
             ChangeWindowAttributesAux, ConfigureWindowAux, ConnectionExt as XprotoConnection,
-            EventMask, MapState, StackMode,
+            EventMask, MapState, PropMode, StackMode,
         },
         Event,
     },
@@ -14,9 +18,12 @@ use x11rb::{
 };
 
 use crate::{
-    DisplayBackend, DisplayEvent, DisplayOutput, OutputMode, OutputModeSelection, Rect,
-    WindowGeometryChange, WindowId, WindowInfo,
+    DisplayBackend, DisplayEvent, DisplayOutput, OutputMode, OutputModeChange, OutputModeSelection,
+    Rect, WindowGeometryChange, WindowId, WindowInfo,
 };
+
+const COORDINATE_TRANSFORMATION_MATRIX: &str = "Coordinate Transformation Matrix";
+const FLOAT_ATOM: &str = "FLOAT";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct X11Snapshot {
@@ -515,7 +522,7 @@ impl X11Backend {
         &self,
         output_name: &str,
         selection: &OutputModeSelection,
-    ) -> io::Result<()> {
+    ) -> io::Result<OutputModeChange> {
         let resources = self.screen_resources()?;
         let (output_id, output) = self.output_by_name(&resources, output_name)?;
         ensure_connected_output(output_name, &output)?;
@@ -562,7 +569,79 @@ impl X11Backend {
             )));
         }
 
-        self.connection.flush().map_err(to_io_error)
+        let mut change = OutputModeChange::default();
+        if let Err(error) = self.remap_touch_devices_to_output(output_name) {
+            change.warnings.push(format!(
+                "output mode changed, but touch remapping failed: {error}"
+            ));
+        }
+
+        self.connection.flush().map_err(to_io_error)?;
+        Ok(change)
+    }
+
+    fn remap_touch_devices_to_output(&self, output_name: &str) -> io::Result<()> {
+        let root_geometry = self
+            .connection
+            .get_geometry(self.root_window())
+            .map_err(to_io_error)?
+            .reply()
+            .map_err(to_io_error)?;
+        let root = Rect::new(
+            0,
+            0,
+            u32::from(root_geometry.width),
+            u32::from(root_geometry.height),
+        );
+        let output = self
+            .output_snapshots()?
+            .into_iter()
+            .find(|output| output.name == output_name)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("output not found after mode switch: {output_name}"),
+                )
+            })?;
+        let output = output.geometry.ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("output is disconnected after mode switch: {output_name}"),
+            )
+        })?;
+        let matrix = coordinate_transformation_matrix(&root, &output)?;
+
+        self.apply_touch_coordinate_transformation(matrix)
+    }
+
+    fn apply_touch_coordinate_transformation(&self, matrix: [f32; 9]) -> io::Result<()> {
+        let property_atom = self.intern_atom(COORDINATE_TRANSFORMATION_MATRIX)?;
+        let float_atom = self.intern_atom(FLOAT_ATOM)?;
+        let matrix_bits = matrix.into_iter().map(f32::to_bits).collect::<Vec<u32>>();
+        let property = XIChangePropertyAux::Data32(matrix_bits);
+        let devices = self
+            .connection
+            .xinput_xi_query_device(Device::ALL)
+            .map_err(to_io_error)?
+            .reply()
+            .map_err(to_io_error)?;
+
+        for device in devices.infos.iter().filter(|device| touch_device(device)) {
+            self.connection
+                .xinput_xi_change_property(
+                    device.deviceid,
+                    PropMode::REPLACE,
+                    property_atom,
+                    float_atom,
+                    9,
+                    &property,
+                )
+                .map_err(to_io_error)?
+                .check()
+                .map_err(to_io_error)?;
+        }
+
+        Ok(())
     }
 
     fn current_output_mode(
@@ -750,6 +829,43 @@ fn set_config_status_label(status: randr::SetConfig) -> &'static str {
     }
 }
 
+fn coordinate_transformation_matrix(root: &Rect, output: &Rect) -> io::Result<[f32; 9]> {
+    if root.width == 0 || root.height == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "root geometry must have positive width and height",
+        ));
+    }
+
+    let root_width = root.width as f32;
+    let root_height = root.height as f32;
+
+    Ok([
+        output.width as f32 / root_width,
+        0.0,
+        (output.x - root.x) as f32 / root_width,
+        0.0,
+        output.height as f32 / root_height,
+        (output.y - root.y) as f32 / root_height,
+        0.0,
+        0.0,
+        1.0,
+    ])
+}
+
+fn touch_device(device: &XIDeviceInfo) -> bool {
+    device
+        .enabled
+        .then_some(())
+        .and_then(|_| {
+            device
+                .classes
+                .iter()
+                .find(|class| matches!(class.data, DeviceClassData::Touch(_)))
+        })
+        .is_some()
+}
+
 fn text_property_value(value: &[u8]) -> Option<String> {
     if value.is_empty() {
         return None;
@@ -839,11 +955,16 @@ fn to_io_error(error: impl std::fmt::Display) -> io::Error {
 #[cfg(test)]
 mod tests {
     use super::{
-        mode_infos, refresh_millihertz, text_property_value, window_class_value, x11_window_id,
-        X11OutputSnapshot, X11Snapshot, X11WindowSnapshot,
+        coordinate_transformation_matrix, mode_infos, refresh_millihertz, text_property_value,
+        touch_device, window_class_value, x11_window_id, X11OutputSnapshot, X11Snapshot,
+        X11WindowSnapshot,
     };
     use crate::{DisplayEvent, DisplayOutput, Rect, WindowId, WindowInfo};
     use x11rb::protocol::randr::{GetScreenResourcesCurrentReply, ModeFlag, ModeInfo};
+    use x11rb::protocol::xinput::{
+        DeviceClass, DeviceClassData, DeviceClassDataKey, DeviceClassDataTouch, DeviceId,
+        DeviceType, TouchMode, XIDeviceInfo,
+    };
 
     #[test]
     fn converts_snapshot_to_reset_and_current_state_events() {
@@ -1006,6 +1127,49 @@ mod tests {
         assert_eq!(refresh_millihertz(&mode), Some(29_970));
     }
 
+    #[test]
+    fn calculates_coordinate_transformation_matrix_for_output_relative_to_root() {
+        let root = Rect::new(0, 0, 3840, 1080);
+        let output = Rect::new(1920, 0, 1920, 1080);
+
+        let matrix =
+            coordinate_transformation_matrix(&root, &output).expect("matrix should be calculated");
+
+        assert_eq!(matrix, [0.5, 0.0, 0.5, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn rejects_coordinate_transformation_matrix_for_invalid_root() {
+        let output = Rect::new(0, 0, 1920, 1080);
+
+        assert!(coordinate_transformation_matrix(&Rect::new(0, 0, 0, 1080), &output).is_err());
+        assert!(coordinate_transformation_matrix(&Rect::new(0, 0, 1920, 0), &output).is_err());
+    }
+
+    #[test]
+    fn selects_only_enabled_touch_devices() {
+        assert!(touch_device(&test_xi_device(
+            true,
+            vec![DeviceClassData::Touch(DeviceClassDataTouch {
+                mode: TouchMode::DIRECT,
+                num_touches: 10,
+            })],
+        )));
+        assert!(!touch_device(&test_xi_device(
+            false,
+            vec![DeviceClassData::Touch(DeviceClassDataTouch {
+                mode: TouchMode::DIRECT,
+                num_touches: 10,
+            })],
+        )));
+        assert!(!touch_device(&test_xi_device(
+            true,
+            vec![DeviceClassData::Key(DeviceClassDataKey {
+                keys: Vec::new()
+            })],
+        )));
+    }
+
     struct TestMode {
         id: u32,
         width: u16,
@@ -1032,6 +1196,24 @@ mod tests {
             vtotal: spec.vtotal,
             name_len: spec.name_len,
             mode_flags: spec.mode_flags,
+        }
+    }
+
+    fn test_xi_device(enabled: bool, classes: Vec<DeviceClassData>) -> XIDeviceInfo {
+        XIDeviceInfo {
+            deviceid: DeviceId::from(1_u16),
+            type_: DeviceType::SLAVE_POINTER,
+            attachment: DeviceId::from(0_u16),
+            enabled,
+            name: b"test device".to_vec(),
+            classes: classes
+                .into_iter()
+                .map(|data| DeviceClass {
+                    len: 2,
+                    sourceid: DeviceId::from(1_u16),
+                    data,
+                })
+                .collect(),
         }
     }
 }
