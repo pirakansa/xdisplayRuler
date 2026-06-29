@@ -7,6 +7,7 @@ The binary is named `xdisplay-ruler`.
 - Snapshot commands: inspect the current display and window state.
 - Output mode commands: list and switch existing RandR output modes.
 - Window control commands: raise, lower, move, resize, or place X11 windows.
+- Layout command: enforce a JSON layout for managed kiosk windows.
 - Other commands: print help or version information.
 
 ## Commands
@@ -16,6 +17,7 @@ The binary is named `xdisplay-ruler`.
 - `watch`: keep refreshing and printing display snapshots.
 - `modes`: list the modes RandR reports for an output.
 - `mode`: change an output to an existing RandR mode.
+- `enforce`: fit layout-defined windows to their outputs.
 - `raise`: raise an X11 window above its siblings.
 - `lower`: lower an X11 window below its siblings.
 - `configure`: move or resize an X11 window with explicit geometry values.
@@ -36,6 +38,11 @@ standard error and exits with status `2`.
 - `--iterations N`: stop `watch` mode after `N` snapshots. This is intended for
   tests, scripts, and diagnostics. The value must be a positive integer. When
   omitted, `watch` keeps running.
+- `--layout FILE`: select the layout JSON file for `enforce`.
+- `--once`: make `enforce` apply once and exit.
+- `--dry-run`: make `enforce` print one plan and exit without X11 changes.
+- `--interval MS`: set the recurring `enforce` interval. The value must be a
+  positive integer. The default is `1000`.
 
 ### Output Options
 
@@ -94,6 +101,7 @@ xdisplay-ruler mode --output NAME [--width N --height N] [--rate HZ] [--rotate D
 ### Window Control
 
 ```text
+xdisplay-ruler enforce --layout FILE [--once] [--dry-run] [--interval MS] [--backend x11]
 xdisplay-ruler raise WINDOW_SELECTOR [--backend x11]
 xdisplay-ruler lower WINDOW_SELECTOR [--backend x11]
 xdisplay-ruler configure WINDOW_SELECTOR [--x N] [--y N] [--width N] [--height N] [--backend x11]
@@ -116,9 +124,12 @@ The X11 backend requires a reachable Xorg server through the usual `DISPLAY`
 environment. It verifies that the server provides the RANDR extension before
 collecting a snapshot.
 
-`modes`, `mode`, `place`, `configure`, `raise`, and `lower` default to the X11
-backend because they are real X11 or RandR operations. Selecting
-`--backend in-memory` for those commands returns a usage error.
+`modes`, `mode`, `enforce`, `place`, `configure`, `raise`, and `lower` default
+to the X11 backend because they are real X11 or RandR operations. Selecting
+`--backend in-memory` for `modes`, `mode`, `place`, `configure`, `raise`, or
+`lower` returns a usage error. `enforce --dry-run --backend in-memory` can be
+used for deterministic planning diagnostics, but it has no real outputs or
+windows unless the backend is extended by tests.
 
 ## Command Requirements
 
@@ -142,6 +153,10 @@ backend because they are real X11 or RandR operations. Selecting
 - `place` currently requires `--fullscreen`. It uses the selected output
   geometry, configures the target window to that rectangle, and raises the
   window.
+- `enforce` requires `--layout`. Without `--once` or `--dry-run`, it keeps
+  running and reapplies the layout at `--interval`. `--dry-run` prints one
+  operation plan and exits. See [Layout enforce](layout.md) for the JSON schema
+  and selector/output error behavior.
 - `configure` requires at least one of `--x`, `--y`, `--width`, or `--height`.
   It only sends the geometry fields that were provided.
 
@@ -207,4 +222,10 @@ Move, resize, or place a window:
 xdisplay-ruler configure --window-class Gnome-terminal --x 0 --y 0
 xdisplay-ruler configure --window-class Gnome-terminal --width 480 --height 260
 xdisplay-ruler place --window-class Gnome-terminal --output HDMI-2 --fullscreen
+```
+
+Dry-run a layout enforce plan:
+
+```bash
+xdisplay-ruler enforce --layout layout.json --dry-run
 ```

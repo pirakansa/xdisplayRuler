@@ -45,6 +45,13 @@ Place a window fullscreen on an output:
 xdisplay-ruler place --window-class Gnome-terminal --output HDMI-2 --fullscreen
 ```
 
+Preview or run a kiosk layout:
+
+```bash
+xdisplay-ruler enforce --layout layout.json --dry-run
+xdisplay-ruler enforce --layout layout.json
+```
+
 Move or resize a window:
 
 ```bash

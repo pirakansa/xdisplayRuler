@@ -169,7 +169,7 @@ impl X11Backend {
         self.connection.setup().roots[self.screen_index].root
     }
 
-    fn snapshot_events(&self) -> io::Result<Vec<DisplayEvent>> {
+    pub(crate) fn snapshot_events(&self) -> io::Result<Vec<DisplayEvent>> {
         Ok(self.snapshot()?.into_events())
     }
 

@@ -10,6 +10,7 @@ default.
 - List existing RandR output modes.
 - Switch an output to one of its existing modes.
 - Raise, lower, move, resize, or place mapped X11 windows.
+- Keep layout-defined kiosk windows fitted to output geometry.
 
 ## Command Map
 
@@ -31,6 +32,8 @@ xdisplay-ruler mode --output HDMI-2 --width 1920 --height 1080
 Window commands:
 
 ```text
+xdisplay-ruler enforce --layout layout.json
+xdisplay-ruler enforce --layout layout.json --once --dry-run
 xdisplay-ruler raise WINDOW_SELECTOR
 xdisplay-ruler lower WINDOW_SELECTOR
 xdisplay-ruler configure WINDOW_SELECTOR --x 0 --y 0
@@ -191,6 +194,53 @@ xdisplay-ruler place --window-class Gnome-terminal --output HDMI-2 --fullscreen
 The current `place` command supports fullscreen placement only. It moves and
 resizes the target window to the selected output geometry, then raises the
 window.
+
+## Enforce a Layout
+
+Create a layout file that maps each managed app to a RandR output:
+
+```json
+{
+  "schema_version": 1,
+  "unmanaged_windows": "allow_above",
+  "windows": [
+    {
+      "selector": { "app_id": "Player" },
+      "output": "HDMI-2"
+    },
+    {
+      "selector": { "app_id": "Overlay" },
+      "output": "HDMI-2"
+    }
+  ]
+}
+```
+
+Preview the planned operations:
+
+```bash
+xdisplay-ruler enforce --layout layout.json --dry-run
+```
+
+Apply once and exit:
+
+```bash
+xdisplay-ruler enforce --layout layout.json --once
+```
+
+Keep applying the layout:
+
+```bash
+xdisplay-ruler enforce --layout layout.json --interval 1000
+```
+
+Each managed window is moved and resized to the current geometry of its target
+output. `app_id` matches the X11 `WM_CLASS` class name shown as `class="..."`
+in snapshot output.
+
+Use `unmanaged_windows: "allow_above"` when unknown apps are allowed to appear
+above managed windows. Use `keep_below_managed` when managed windows should be
+raised in layout order on each enforce cycle.
 
 ## Reading Snapshot Output
 

@@ -1,7 +1,12 @@
-use std::io::{self, Write};
+use std::{
+    io::{self, Write},
+    thread,
+    time::Duration,
+};
 
 use crate::{
-    BackendError, ConfiguredBackend, DisplayMonitor, OutputMode, OutputModeChange,
+    build_enforcement_plan, BackendError, ConfiguredBackend, DisplayMonitor, DisplayState,
+    EnforcementMode, EnforcementPlan, LayoutOperation, LayoutPolicy, OutputMode, OutputModeChange,
     OutputModeSelection, OutputRotation, WindowGeometryChange, WindowId, WindowInfo,
 };
 
@@ -27,6 +32,7 @@ Usage:
     xdisplay-ruler mode --output NAME [--width N --height N] [--rate HZ] [--rotate DIR] [--backend x11]
 
   Window Control:
+    xdisplay-ruler enforce --layout FILE [--once] [--dry-run] [--interval MS] [--backend x11]
     xdisplay-ruler raise WINDOW_SELECTOR [--backend x11]
     xdisplay-ruler lower WINDOW_SELECTOR [--backend x11]
     xdisplay-ruler configure WINDOW_SELECTOR [--x N] [--y N] [--width N] [--height N] [--backend x11]
@@ -48,6 +54,7 @@ Commands:
   watch     Keep refreshing and printing display-state snapshots.
   modes     List available modes for an output.
   mode      Change an output mode.
+  enforce   Keep layout-defined windows fitted to their output.
   place     Place a window on an output.
   configure Move or resize a window.
   raise     Raise a window above its siblings.
@@ -56,6 +63,10 @@ Commands:
 Global Options:
   --backend NAME      Backend to use. Supported: x11, xorg, in-memory.
   --iterations N      Stop watch after N snapshots. Must be positive.
+  --layout FILE       Layout JSON file for enforce.
+  --once              Apply enforce once and exit.
+  --dry-run           Print the enforce plan without X11 changes.
+  --interval MS       Enforce reapply interval in milliseconds. Must be positive.
 
 Output Options:
   --output NAME       X11 RandR output name, for example HDMI-2.
@@ -74,6 +85,7 @@ Geometry Options:
 Notes:
   mode requires --output and either --width with --height or --rotate.
   --rate is optional when --width and --height are provided.
+  enforce requires --layout. Without --once or --dry-run, it keeps running.
   place requires WINDOW_SELECTOR, --output, and --fullscreen.
   configure requires WINDOW_SELECTOR and at least one geometry option.
   Window selector name matches are exact and must identify one mapped window.
@@ -86,6 +98,7 @@ Examples:
   xdisplay-ruler lower --window 0x800003
   xdisplay-ruler configure --window-class Gnome-terminal --x 0 --y 0
   xdisplay-ruler place --window-class Gnome-terminal --output HDMI-2 --fullscreen
+  xdisplay-ruler enforce --layout layout.json --once --dry-run
 ";
 
 #[derive(Debug, Eq, PartialEq)]
@@ -100,6 +113,7 @@ enum Command {
     Watch,
     Modes,
     Mode,
+    Enforce,
     Place,
     Configure,
     Raise,
@@ -112,6 +126,10 @@ struct CliOptions {
     backend_name: String,
     iterations: Option<usize>,
     output_name: Option<String>,
+    layout_path: Option<String>,
+    once: bool,
+    dry_run: bool,
+    interval_millis: usize,
     mode_width: Option<u16>,
     mode_height: Option<u16>,
     mode_refresh_millihertz: Option<u32>,
@@ -128,6 +146,10 @@ impl Default for CliOptions {
             backend_name: "x11".to_string(),
             iterations: None,
             output_name: None,
+            layout_path: None,
+            once: false,
+            dry_run: false,
+            interval_millis: 1000,
             mode_width: None,
             mode_height: None,
             mode_refresh_millihertz: None,
@@ -193,6 +215,9 @@ where
         Command::Watch => handle_command_result(run_watch(options, stdout), stderr),
         Command::Modes => handle_command_result(run_modes_command(options, stdout), stderr),
         Command::Mode => handle_mode_command_result(run_mode_command(options), stderr),
+        Command::Enforce => {
+            handle_command_result(run_enforce_command(options, stdout, stderr), stderr)
+        }
         Command::Place => handle_command_result(run_place_command(options), stderr),
         Command::Configure => handle_command_result(run_configure_command(options), stderr),
         Command::Raise => {
@@ -225,6 +250,11 @@ fn parse_options(arguments: &[String]) -> Result<CliOptions, String> {
             }
             "mode" => {
                 options.command = Command::Mode;
+                options.backend_name = "x11".to_string();
+                index = 1;
+            }
+            "enforce" => {
+                options.command = Command::Enforce;
                 options.backend_name = "x11".to_string();
                 index = 1;
             }
@@ -267,6 +297,20 @@ fn parse_options(arguments: &[String]) -> Result<CliOptions, String> {
             "--output" => {
                 let value = next_value(arguments, &mut index, "--output")?;
                 options.output_name = Some(value.to_string());
+            }
+            "--layout" => {
+                let value = next_value(arguments, &mut index, "--layout")?;
+                options.layout_path = Some(value.to_string());
+            }
+            "--once" => {
+                options.once = true;
+            }
+            "--dry-run" => {
+                options.dry_run = true;
+            }
+            "--interval" => {
+                let value = next_value(arguments, &mut index, "--interval")?;
+                options.interval_millis = parse_non_zero_usize(value, "--interval")?;
             }
             "--fullscreen" => {
                 options.fullscreen = true;
@@ -480,6 +524,107 @@ fn run_watch(options: CliOptions, stdout: &mut impl Write) -> Result<(), String>
     }
 
     Ok(())
+}
+
+fn run_enforce_command(
+    options: CliOptions,
+    stdout: &mut impl Write,
+    stderr: &mut impl Write,
+) -> Result<(), String> {
+    let layout_path = options
+        .layout_path
+        .as_deref()
+        .ok_or_else(|| "--layout is required".to_string())?;
+    let policy = LayoutPolicy::read_from_path(layout_path).map_err(|error| error.to_string())?;
+    let mut backend = build_backend(&options.backend_name)?;
+    let mut state = DisplayState::new();
+
+    if options.dry_run || options.once {
+        let mode = if options.once {
+            EnforcementMode::Once
+        } else {
+            EnforcementMode::Daemon
+        };
+        let plan = plan_enforcement_cycle(&mut backend, &mut state, &policy, mode)?;
+        write_warnings(&plan, stderr)?;
+
+        if options.dry_run {
+            write!(stdout, "{}", enforcement_plan_report(&plan))
+                .map_err(|error| error.to_string())?;
+        } else {
+            apply_enforcement_plan(&backend, &plan)?;
+        }
+
+        return Ok(());
+    }
+
+    loop {
+        let plan =
+            plan_enforcement_cycle(&mut backend, &mut state, &policy, EnforcementMode::Daemon)?;
+        write_warnings(&plan, stderr)?;
+        apply_enforcement_plan(&backend, &plan)?;
+        thread::sleep(Duration::from_millis(options.interval_millis as u64));
+    }
+}
+
+fn plan_enforcement_cycle(
+    backend: &mut ConfiguredBackend,
+    state: &mut DisplayState,
+    policy: &LayoutPolicy,
+    mode: EnforcementMode,
+) -> Result<EnforcementPlan, String> {
+    let events = backend
+        .snapshot_events()
+        .map_err(|error| error.to_string())?;
+    for event in events {
+        state.apply(event);
+    }
+
+    build_enforcement_plan(policy, state, mode).map_err(|error| error.to_string())
+}
+
+fn apply_enforcement_plan(
+    backend: &ConfiguredBackend,
+    plan: &EnforcementPlan,
+) -> Result<(), String> {
+    for operation in &plan.operations {
+        match operation {
+            LayoutOperation::ConfigureWindow { id, .. } => {
+                let change = operation
+                    .geometry_change()
+                    .expect("configure operation should have geometry");
+                backend
+                    .configure_window(*id, &change)
+                    .map_err(|error| error.to_string())?;
+            }
+            LayoutOperation::RaiseWindow { id, .. } => backend
+                .raise_window(*id)
+                .map_err(|error| error.to_string())?,
+        }
+    }
+
+    Ok(())
+}
+
+fn write_warnings(plan: &EnforcementPlan, stderr: &mut impl Write) -> Result<(), String> {
+    for warning in &plan.warnings {
+        writeln!(stderr, "warning: {warning}").map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
+}
+
+fn enforcement_plan_report(plan: &EnforcementPlan) -> String {
+    let mut report = format!(
+        "xdisplay-ruler enforce dry-run\noperations: {}\n",
+        plan.operations.len()
+    );
+
+    for operation in &plan.operations {
+        report.push_str(&format!("- {operation}\n"));
+    }
+
+    report
 }
 
 fn run_stack_command(options: CliOptions, command: StackCommand) -> Result<(), String> {
@@ -732,6 +877,12 @@ fn handle_mode_command_result(
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
     use super::{handle_mode_command_result, run, CliExit, WindowSelector};
     use crate::{OutputMode, Rect, WindowId, WindowInfo};
     use crate::{OutputModeChange, OutputRotation};
@@ -782,6 +933,81 @@ mod tests {
             String::from_utf8_lossy(&stderr),
             "unsupported backend: unsupported\ntry --help\n"
         );
+    }
+
+    #[test]
+    fn requires_layout_for_enforce() {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let exit = run(["enforce", "--once"], &mut stdout, &mut stderr).expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "--layout is required\ntry --help\n"
+        );
+    }
+
+    #[test]
+    fn validates_enforce_interval() {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let exit = run(
+            ["enforce", "--layout", "layout.json", "--interval", "0"],
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("cli should run");
+
+        assert_eq!(exit, CliExit::UsageError);
+        assert!(stdout.is_empty());
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "--interval must be a positive integer\ntry --help\n"
+        );
+    }
+
+    #[test]
+    fn dry_run_enforce_exits_after_printing_plan() {
+        let layout_path = write_temp_layout(
+            r#"{
+                "schema_version": 1,
+                "windows": [
+                    { "selector": { "app_id": "Player" }, "output": "HDMI-2" }
+                ]
+            }"#,
+        );
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let exit = run(
+            [
+                "enforce",
+                "--backend",
+                "in-memory",
+                "--layout",
+                layout_path.to_str().expect("temp path should be UTF-8"),
+                "--dry-run",
+            ],
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("cli should run");
+
+        assert_eq!(exit, CliExit::Success);
+        assert_eq!(
+            String::from_utf8_lossy(&stdout),
+            "xdisplay-ruler enforce dry-run\noperations: 0\n"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&stderr),
+            "warning: window not found: app_id:\"Player\"\n"
+        );
+
+        fs::remove_file(layout_path).expect("temp layout should be removable");
     }
 
     #[test]
@@ -1365,5 +1591,19 @@ mod tests {
         second_firefox.instance_name = Some("firefox".to_string());
 
         vec![terminal, code, firefox, second_firefox]
+    }
+
+    fn write_temp_layout(content: &str) -> PathBuf {
+        let mut path = std::env::temp_dir();
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after UNIX epoch")
+            .as_nanos();
+        path.push(format!(
+            "xdisplay-ruler-test-{}-{unique}.json",
+            std::process::id()
+        ));
+        fs::write(&path, content).expect("temp layout should be writable");
+        path
     }
 }

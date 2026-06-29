@@ -144,6 +144,13 @@ impl ConfiguredBackend {
             Self::X11(backend) => backend.set_output_mode(output_name, selection),
         }
     }
+
+    pub fn snapshot_events(&mut self) -> io::Result<Vec<DisplayEvent>> {
+        match self {
+            Self::InMemory(backend) => backend.poll_events(),
+            Self::X11(backend) => backend.snapshot_events(),
+        }
+    }
 }
 
 impl DisplayBackend for ConfiguredBackend {
