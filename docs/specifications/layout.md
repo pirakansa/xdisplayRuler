@@ -34,6 +34,10 @@ must be a positive integer. The default is `1000`.
 - `src/layout/mod.rs`: public layout API surface and re-exports.
 - `src/layout/policy.rs`: JSON schema types, selector parsing, and validation errors.
 - `src/layout/planner.rs`: selector/output resolution and enforce operation planning.
+- `src/enforce.rs`: enforce command orchestration for dry-run, once, and recurring modes.
+- `src/enforce/planner.rs`: layout loading, backend snapshot refresh, and plan construction.
+- `src/enforce/executor.rs`: planned operation execution against the selected backend.
+- `src/enforce/report.rs`: warnings and dry-run report rendering.
 
 ## Layout Schema
 

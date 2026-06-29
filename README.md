@@ -3,8 +3,8 @@
 xdisplayRuler is a Rust CLI foundation for tracking Xorg display and window
 state on kiosk-style Linux systems.
 
-The current build provides the core state engine, backend event boundary,
-monitor flow, CLI snapshot output, and an X11/RandR snapshot backend.
+The current build provides display snapshots, watch mode, RandR output mode
+control, X11 window control, and layout enforcement for kiosk-style workflows.
 
 ## Quick Start
 
@@ -80,7 +80,8 @@ vorbere run build
 
 ## Documentation
 
-- [User guides](docs/user-guides/README.md): practical command usage
+- [User guides](docs/user-guides/README.md): practical workflows for snapshots,
+  output modes, window control, and layout enforcement
 - [Specification references](docs/specifications/README.md): implemented CLI,
   model, and state behavior
 
@@ -91,10 +92,14 @@ vorbere run build
 - `src/cli/options.rs`: option parsing and value validation
 - `src/cli/command.rs`: backend-facing command execution
 - `src/cli/report.rs`: user-facing text rendering for CLI reports
+- `src/enforce.rs`: layout enforce command orchestration
+- `src/enforce/`: enforce planning, execution, and report rendering
 - `src/layout/policy.rs`: layout schema, selectors, and validation errors
 - `src/layout/planner.rs`: enforce planning and stacking policy decisions
 - `src/backend/x11/snapshot.rs`: X11 snapshot collection, window discovery, and event waiting
-- `src/backend/x11/control.rs`: RandR mode changes and X11 window control operations
+- `src/backend/x11/control.rs`: X11 window control operations
+- `src/backend/x11/output_control.rs`: RandR mode listing and mode changes
+- `src/backend/x11/touch_control.rs`: XInput touch remapping after mode changes
 - `src/state/mod.rs`: display-state reducer and event application
 - `src/state/report.rs`: human-readable state reporting
 - `src/lib.rs`: public module exports

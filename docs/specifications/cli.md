@@ -174,39 +174,12 @@ windows unless the backend is extended by tests.
 - `configure` requires at least one of `--x`, `--y`, `--width`, or `--height`.
   It only sends the geometry fields that were provided.
 
-## Snapshot Output
+## Related References
 
-The in-memory diagnostic snapshot is:
-
-```text
-xdisplay-ruler
-backend: in-memory
-outputs: 0
-windows: 0
-focused: none
-top: none
-```
-
-The backend label is `x11` or `in-memory`.
-
-Window rows include `title="..."`, `class="..."`, and `instance="..."` when the
-backend reports the X11 window title or `WM_CLASS` values. Quotes, backslashes,
-and control characters are escaped in these values.
-
-## Modes Output
-
-`modes --output NAME` prints:
-
-```text
-xdisplay-ruler
-output: HDMI-2
-modes: 2
-- 1920x1080 60Hz name="1920x1080" current preferred
-- 1280x720 59.94Hz name="1280x720"
-```
-
-Mode rows include width, height, refresh rate, RandR mode name, and optional
-`current` and `preferred` markers.
+- [Output formats](output-formats.md): snapshot, modes, and dry-run reports.
+- [Layout enforce](layout.md): layout JSON schema and enforce behavior.
+- [Backends and monitoring](backends-and-monitoring.md): backend capabilities
+  and monitor flow.
 
 ## Examples
 

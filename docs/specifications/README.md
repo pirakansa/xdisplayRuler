@@ -30,6 +30,7 @@ project evolves. Code and passing tests are the source of truth.
 ## References
 
 - [CLI](cli.md): command-line arguments, output, and exit behavior.
+- [Output formats](output-formats.md): snapshot, modes, and dry-run reports.
 - [Layout enforce](layout.md): layout JSON schema and enforce behavior.
 - [Backends and monitoring](backends-and-monitoring.md): event source and
   monitor responsibilities.
