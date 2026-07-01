@@ -3,7 +3,8 @@ FROM rust:1.95.0-slim-bookworm
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     LANGUAGE=en_US:en \
-    LC_ALL=C.UTF-8
+    LC_ALL=C.UTF-8 \
+    RUSTUP_PERMIT_COPY_RENAME=true
 
 RUN apt update -y && \
     apt install -y curl git sudo zstd make ripgrep
