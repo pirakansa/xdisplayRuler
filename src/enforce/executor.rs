@@ -1,7 +1,7 @@
-use crate::{ConfiguredBackend, EnforcementPlan, LayoutOperation};
+use crate::{backend::WindowLayoutBackend, EnforcementPlan, LayoutOperation};
 
 pub(super) fn apply_plan(
-    backend: &ConfiguredBackend,
+    backend: &impl WindowLayoutBackend,
     plan: &EnforcementPlan,
 ) -> Result<(), String> {
     for operation in &plan.operations {
@@ -11,7 +11,10 @@ pub(super) fn apply_plan(
     Ok(())
 }
 
-fn apply_operation(backend: &ConfiguredBackend, operation: &LayoutOperation) -> Result<(), String> {
+fn apply_operation(
+    backend: &impl WindowLayoutBackend,
+    operation: &LayoutOperation,
+) -> Result<(), String> {
     match operation {
         LayoutOperation::ConfigureWindow { id, .. } => {
             let change = operation
