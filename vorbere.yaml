@@ -7,7 +7,7 @@ vars:
 
 tasks:
   build:
-    run: cargo build --locked
+    run: cargo build
     desc: Build debug artifacts
 
   run:
@@ -44,11 +44,11 @@ tasks:
     desc: Clean build artifacts
 
   linux-arm64-musl:
-    run: cargo build --locked --release --target ${{ .vars.LINUX_ARM64_MUSL_TARGET }}
+    run: cargo build --release --target ${{ .vars.LINUX_ARM64_MUSL_TARGET }}
     desc: Build release binary for Linux arm64 musl
 
   linux-amd64-musl:
-    run: cargo build --locked --release --target ${{ .vars.LINUX_AMD64_MUSL_TARGET }}
+    run: cargo build --release --target ${{ .vars.LINUX_AMD64_MUSL_TARGET }}
     desc: Build release binary for Linux amd64 musl
 
   release-build-linux-amd64-musl:
