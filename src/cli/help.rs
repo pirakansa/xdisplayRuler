@@ -2,8 +2,8 @@ pub(super) const HELP: &str = "\
 xdisplay-ruler
 
 Overview:
-  Inspect Xorg display state, list or change RandR output modes, and send
-  low-level X11 requests to move, resize, raise, lower, or place windows.
+  Inspect Xorg display state and send low-level X11 requests to move, resize,
+  raise, lower, place, or enforce layout for windows.
 
 Quick Start:
   xdisplay-ruler
@@ -40,8 +40,8 @@ Window Selector:
 Commands:
   snapshot  Print one display-state snapshot. This is the default command.
   watch     Keep refreshing and printing display-state snapshots.
-  modes     List available modes for an output.
-  mode      Change an output mode.
+  modes     List available modes for an output. Transitional.
+  mode      Change an output mode. Transitional.
   enforce   Keep layout-defined windows fitted to their output.
   place     Place a window on an output.
   configure Move or resize a window.
@@ -71,6 +71,9 @@ Geometry Options:
   --height N          Window height for configure. Must be positive.
 
 Notes:
+  modes and mode are transitional display pipeline commands. They still run,
+  but print a warning because display pipeline control is moving to
+  xdisplay-attach.
   mode requires --output and either --width with --height or --rotate.
   --rate is optional when --width and --height are provided.
   enforce requires --layout. Without --once or --dry-run, it keeps running.

@@ -3,6 +3,10 @@
 Use output mode commands to list modes reported by RandR and switch an output to
 one of those existing modes.
 
+These commands are transitional in `xdisplay-ruler`. They still run during the
+migration window, but each invocation prints a warning to standard error because
+display pipeline control is moving to `xdisplay-attach`.
+
 ## List Output Modes
 
 ```bash

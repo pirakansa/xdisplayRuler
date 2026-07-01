@@ -59,8 +59,14 @@ where
             handle_command_result(run_snapshot(&options.backend_name, stdout), stderr)
         }
         Command::Watch => handle_command_result(run_watch(options, stdout), stderr),
-        Command::Modes => handle_command_result(run_modes_command(options, stdout), stderr),
-        Command::Mode => handle_mode_command_result(run_mode_command(options), stderr),
+        Command::Modes => {
+            let result = run_modes_command(options, stderr, stdout);
+            handle_command_result(result, stderr)
+        }
+        Command::Mode => {
+            let result = run_mode_command(options, stderr);
+            handle_mode_command_result(result, stderr)
+        }
         Command::Enforce => {
             handle_command_result(run_enforce_command(options, stdout, stderr), stderr)
         }

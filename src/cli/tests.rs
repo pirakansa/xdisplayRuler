@@ -317,6 +317,14 @@ fn validates_mode_values() {
 fn rejects_mode_commands_for_in_memory_backend() {
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
+    let modes_warning = concat!(
+        "warning: xdisplay-ruler modes is transitional and will move out of xdisplay-ruler; ",
+        "use xdisplay-attach for display pipeline control when available\n",
+    );
+    let mode_warning = concat!(
+        "warning: xdisplay-ruler mode is transitional and will move out of xdisplay-ruler; ",
+        "use xdisplay-attach for display pipeline control when available\n",
+    );
 
     let exit = run(
         ["modes", "--backend", "in-memory", "--output", "HDMI-2"],
@@ -329,7 +337,7 @@ fn rejects_mode_commands_for_in_memory_backend() {
     assert!(stdout.is_empty());
     assert_eq!(
         String::from_utf8_lossy(&stderr),
-        "in-memory backend cannot list X11 output modes\ntry --help\n"
+        format!("{modes_warning}in-memory backend cannot list X11 output modes\ntry --help\n")
     );
 
     stderr.clear();
@@ -351,7 +359,7 @@ fn rejects_mode_commands_for_in_memory_backend() {
     assert_eq!(exit, CliExit::UsageError);
     assert_eq!(
         String::from_utf8_lossy(&stderr),
-        "in-memory backend cannot change X11 output modes\ntry --help\n"
+        format!("{mode_warning}in-memory backend cannot change X11 output modes\ntry --help\n")
     );
 }
 

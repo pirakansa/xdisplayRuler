@@ -5,7 +5,8 @@ The binary is named `xdisplay-ruler`.
 ## Command Groups
 
 - Snapshot commands: inspect the current display and window state.
-- Output mode commands: list and switch existing RandR output modes.
+- Transitional output mode commands: list and switch existing RandR output
+  modes while display pipeline control migrates out of `xdisplay-ruler`.
 - Window control commands: raise, lower, move, resize, or place X11 windows.
 - Layout command: enforce a JSON layout for managed kiosk windows.
 - Other commands: print help or version information.
@@ -143,6 +144,10 @@ windows unless the backend is extended by tests.
 
 - `mode` requires `--output` and either `--width` with `--height` or
   `--rotate`.
+- `modes` and `mode` are transitional display pipeline commands. Once command
+  arguments have passed basic validation and the command begins backend work,
+  each command prints a warning to standard error:
+  `warning: xdisplay-ruler <command> is transitional and will move out of xdisplay-ruler; use xdisplay-attach for display pipeline control when available`.
 - `--rotate` accepts `normal`, `left`, `right`, or `inverted`. It updates the
   RandR CRTC rotation. If `--width` and `--height` are omitted, the backend
   reuses the current active mode.

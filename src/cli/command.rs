@@ -81,11 +81,13 @@ pub(super) fn run_stack_command(options: CliOptions, command: StackCommand) -> R
 
 pub(super) fn run_modes_command(
     options: CliOptions,
+    stderr: &mut impl Write,
     stdout: &mut impl Write,
 ) -> Result<(), String> {
     let output_name = options
         .output_name
         .ok_or_else(|| "--output is required".to_string())?;
+    write_pipeline_command_warning("modes", stderr)?;
     let backend = build_backend(&options.backend_name)?;
     let modes = backend
         .output_modes(&output_name)
@@ -94,7 +96,10 @@ pub(super) fn run_modes_command(
     write!(stdout, "{}", modes_report(&output_name, &modes)).map_err(|error| error.to_string())
 }
 
-pub(super) fn run_mode_command(options: CliOptions) -> Result<OutputModeChange, String> {
+pub(super) fn run_mode_command(
+    options: CliOptions,
+    stderr: &mut impl Write,
+) -> Result<OutputModeChange, String> {
     let output_name = options
         .output_name
         .ok_or_else(|| "--output is required".to_string())?;
@@ -114,6 +119,7 @@ pub(super) fn run_mode_command(options: CliOptions) -> Result<OutputModeChange, 
         refresh_millihertz: options.mode_refresh_millihertz,
         rotation: options.mode_rotation,
     };
+    write_pipeline_command_warning("mode", stderr)?;
     let backend = build_backend(&options.backend_name)?;
 
     backend
@@ -231,6 +237,14 @@ fn build_backend(name: &str) -> Result<ConfiguredBackend, String> {
         BackendError::Io(error) => error.to_string(),
         BackendError::UnsupportedName(name) => format!("unsupported backend: {name}"),
     })
+}
+
+fn write_pipeline_command_warning(command: &str, stderr: &mut impl Write) -> Result<(), String> {
+    writeln!(
+        stderr,
+        "warning: xdisplay-ruler {command} is transitional and will move out of xdisplay-ruler; use xdisplay-attach for display pipeline control when available"
+    )
+    .map_err(|error| error.to_string())
 }
 
 pub(super) fn handle_command_result(
