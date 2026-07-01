@@ -1,6 +1,6 @@
 # xdisplay-ruler Migration Handoff
 
-Status: Draft
+Status: Stage 2 implemented
 
 Audience: worker responsible for this `xdisplay-ruler` repository.
 
@@ -25,8 +25,9 @@ mode selection, output position, output rotation, and RandR root screen sizing.
   move/resize, fullscreen placement, and layout enforcement;
 - display pipeline behavior: output mode listing and output mode switching.
 
-The migration goal is to keep the first group and remove or deprecate the
-second group once replacement behavior exists in another tool.
+The migration goal is to keep the first group and remove the second group once
+replacement behavior exists in another tool or the breaking change is explicitly
+approved.
 
 ## Responsibility to Preserve
 
@@ -46,8 +47,9 @@ Preserve these `xdisplay-ruler` responsibilities:
 
 Do not add new display pipeline responsibilities to `xdisplay-ruler`.
 
-After replacement coverage exists in a separate display pipeline tool, remove or
-deprecate these responsibilities from `xdisplay-ruler`:
+After replacement coverage exists in a separate display pipeline tool or the
+breaking change is explicitly approved, remove these responsibilities from
+`xdisplay-ruler`:
 
 - selecting output modes;
 - switching output modes;
@@ -73,28 +75,12 @@ Do not break existing users during planning.
 - Do not update user-facing docs to claim behavior has changed before code
   changes land.
 
-### Stage 2: Mark Pipeline Commands as Transitional
+### Stage 2: Remove Pipeline Commands
 
-When replacement coverage exists elsewhere, add deprecation messaging for
-pipeline commands.
+When replacement coverage exists elsewhere or the user explicitly approves the
+breaking change, remove the pipeline commands without a deprecation window.
 
-Expected deprecated commands:
-
-```text
-xdisplay-ruler modes
-xdisplay-ruler mode
-```
-
-Deprecation behavior should:
-
-- print a clear warning to standard error;
-- keep the command behavior working during the deprecation window;
-- name the replacement tool and command shape when known;
-- include tests for warning behavior and exit status.
-
-### Stage 3: Remove Pipeline Commands
-
-After the deprecation window or explicit approval:
+Removal behavior should:
 
 - remove `mode` command parsing and execution;
 - remove `modes` command parsing and execution unless retained as a read-only
@@ -145,9 +131,8 @@ implemented.
 - `enforce` does not enable outputs or change output modes.
 - Missing outputs remain clear user-facing errors or warnings according to the
   existing enforce mode.
-- Deprecation warnings for `mode` and `modes`, if added, are tested.
-- After final removal, CLI help, specifications, user guides, and tests no
-  longer advertise removed pipeline commands.
+- CLI help, specifications, user guides, and tests no longer advertise removed
+  pipeline commands.
 - `vorbere run check`, `vorbere run test`, and `vorbere run build` pass before
   handoff completion.
 
@@ -163,8 +148,8 @@ implemented.
 
 ## Risks and Constraints
 
-- Removing `mode` and `modes` is a breaking CLI change unless a deprecation
-  window or compatibility shim is provided.
+- Removing `mode` and `modes` is a breaking CLI change and requires replacement
+  coverage or explicit approval.
 - Some output mode listing code may look read-only, but it still belongs to the
   display pipeline area if it is documented as mode-management workflow.
 - Touch remapping currently tied to mode changes may need a migration decision
@@ -174,8 +159,4 @@ implemented.
 
 ## Open Questions
 
-- Should `xdisplay-ruler modes` remain as a read-only diagnostic command, or
-  should all mode-oriented output move out of this repository?
-- What deprecation window is acceptable for existing `xdisplay-ruler mode`
-  users?
 - Should touch input remapping move out with display pipeline mode changes?
