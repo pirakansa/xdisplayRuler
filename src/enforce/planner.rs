@@ -31,10 +31,6 @@ impl EnforcementSession {
         &self.backend
     }
 
-    pub(super) fn build_strict_plan(&mut self) -> Result<EnforcementPlan, String> {
-        self.build_plan(EnforcementMode::Once)
-    }
-
     pub(super) fn build_recoverable_plan(&mut self) -> Result<EnforcementPlan, String> {
         self.build_plan(EnforcementMode::Daemon)
     }

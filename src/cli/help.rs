@@ -86,5 +86,5 @@ Examples:
   xdisplay-ruler lower --window 0x800003
   xdisplay-ruler configure --window-class Gnome-terminal --x 0 --y 0
   xdisplay-ruler place --window-class Gnome-terminal --output HDMI-2 --fullscreen
-  xdisplay-ruler enforce --layout layout.json --once --dry-run
+  xdisplay-ruler enforce --layout layout.json --dry-run
 ";

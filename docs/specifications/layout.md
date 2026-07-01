@@ -27,7 +27,8 @@ xdisplay-ruler enforce --layout layout.json
 `--interval MS` sets the recurring apply interval in milliseconds. The value
 must be a positive integer. The default is `1000`.
 
-`--dry-run` prints one plan and exits, even when `--once` is omitted.
+`--dry-run` prints one plan and exits. If `--dry-run` and `--once` are both
+provided, dry-run behavior takes precedence.
 
 ## Implementation Layout
 
@@ -123,17 +124,12 @@ Layout read errors, invalid JSON, unsupported schema versions, missing required
 fields, unknown fields, invalid selector shapes, and invalid option values are
 usage errors.
 
-In `--once` mode:
-
-- A selector with zero matches is an error.
-- A selector with multiple matches is an error.
-- A missing or disconnected output is an error.
-
-In recurring mode:
+In `--once`, `--dry-run`, and recurring mode:
 
 - Unresolved selectors and outputs are warnings.
 - Ambiguous selectors are warnings.
 - The affected rule is skipped for that cycle and retried on the next cycle.
 
-`--dry-run` without `--once` uses the recurring-mode warning behavior for its
-single printed plan. `--dry-run --once` uses once-mode errors.
+Recurring mode prints a warning when it first appears, then suppresses it while
+it remains unchanged. If a warning disappears and later appears again, it is
+printed again.

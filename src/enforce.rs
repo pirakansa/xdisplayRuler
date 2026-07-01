@@ -1,4 +1,4 @@
-use std::{io::Write, thread, time::Duration};
+use std::{collections::HashSet, io::Write, thread, time::Duration};
 
 use crate::ConfiguredBackend;
 
@@ -8,7 +8,7 @@ mod report;
 
 use executor::apply_plan;
 use planner::EnforcementSession;
-use report::{write_dry_run_report, write_warnings};
+use report::{write_dry_run_report, write_new_warnings, write_warnings};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct EnforceOptions {
@@ -66,7 +66,7 @@ fn run_single_cycle(
 ) -> Result<(), String> {
     let plan = match mode {
         EnforceCycleMode::DryRun => session.build_recoverable_plan()?,
-        EnforceCycleMode::ApplyOnce => session.build_strict_plan()?,
+        EnforceCycleMode::ApplyOnce => session.build_recoverable_plan()?,
     };
     write_warnings(&plan, stderr)?;
 
@@ -81,9 +81,10 @@ fn run_daemon(
     interval: Duration,
     stderr: &mut impl Write,
 ) -> Result<(), String> {
+    let mut previous_warnings = HashSet::new();
     loop {
         let plan = session.build_recoverable_plan()?;
-        write_warnings(&plan, stderr)?;
+        write_new_warnings(&plan, stderr, &mut previous_warnings)?;
         apply_plan(session.backend(), &plan)?;
         thread::sleep(interval);
     }

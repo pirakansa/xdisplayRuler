@@ -136,7 +136,7 @@ fn dry_run_enforce_exits_after_printing_plan() {
 }
 
 #[test]
-fn once_enforce_reports_unresolved_rules_as_usage_errors() {
+fn once_enforce_warns_and_skips_unresolved_rules() {
     let layout_path = write_temp_layout(
         r#"{
                 "schema_version": 1,
@@ -162,11 +162,11 @@ fn once_enforce_reports_unresolved_rules_as_usage_errors() {
     )
     .expect("cli should run");
 
-    assert_eq!(exit, CliExit::UsageError);
+    assert_eq!(exit, CliExit::Success);
     assert!(stdout.is_empty());
     assert_eq!(
         String::from_utf8_lossy(&stderr),
-        "window not found: app_id:\"Player\"\ntry --help\n"
+        "warning: window not found: app_id:\"Player\"\n"
     );
 
     fs::remove_file(layout_path).expect("temp layout should be removable");
