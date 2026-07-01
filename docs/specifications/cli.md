@@ -5,8 +5,6 @@ The binary is named `xdisplay-ruler`.
 ## Command Groups
 
 - Snapshot commands: inspect the current display and window state.
-- Transitional output mode commands: list and switch existing RandR output
-  modes while display pipeline control migrates out of `xdisplay-ruler`.
 - Window control commands: raise, lower, move, resize, or place X11 windows.
 - Layout command: enforce a JSON layout for managed kiosk windows.
 - Other commands: print help or version information.
@@ -17,15 +15,12 @@ The binary is named `xdisplay-ruler`.
 - `src/cli/help.rs`: the user-facing help document embedded in the binary.
 - `src/cli/options.rs`: command selection, argument parsing, and scalar validation.
 - `src/cli/command.rs`: backend construction, selector resolution, and side-effecting commands.
-- `src/cli/report.rs`: human-readable mode listing output and escaping rules.
 
 ## Commands
 
 - No arguments: run the default `snapshot` command with the X11 backend.
 - `snapshot`: print the current display snapshot once.
 - `watch`: keep refreshing and printing display snapshots.
-- `modes`: list the modes RandR reports for an output.
-- `mode`: change an output to an existing RandR mode.
 - `enforce`: fit layout-defined windows to their outputs.
 - `raise`: raise an X11 window above its siblings.
 - `lower`: lower an X11 window below its siblings.
@@ -55,10 +50,7 @@ standard error and exits with status `2`.
 
 ### Output Options
 
-- `--output NAME`: select a RandR output for `modes`, `mode`, or `place`.
-- `--rate HZ`: select a refresh rate for `mode`. Values such as `60`, `59.94`,
-  and `59.940` are accepted. Values are interpreted as Hz and stored internally
-  as millihertz.
+- `--output NAME`: select a RandR output for `place`.
 
 ### Window Selector Options
 
@@ -100,13 +92,6 @@ xdisplay-ruler [snapshot] [--backend NAME]
 xdisplay-ruler watch [--backend NAME] [--iterations N]
 ```
 
-### Output Modes
-
-```text
-xdisplay-ruler modes --output NAME [--backend x11]
-xdisplay-ruler mode --output NAME [--width N --height N] [--rate HZ] [--rotate DIR] [--backend x11]
-```
-
 ### Window Control
 
 ```text
@@ -133,42 +118,15 @@ The X11 backend requires a reachable Xorg server through the usual `DISPLAY`
 environment. It verifies that the server provides the RANDR extension before
 collecting a snapshot.
 
-`modes`, `mode`, `enforce`, `place`, `configure`, `raise`, and `lower` default
-to the X11 backend because they are real X11 or RandR operations. Selecting
-`--backend in-memory` for `modes`, `mode`, `place`, `configure`, `raise`, or
-`lower` returns a usage error. `enforce --dry-run --backend in-memory` can be
-used for deterministic planning diagnostics, but it has no real outputs or
-windows unless the backend is extended by tests.
+`enforce`, `place`, `configure`, `raise`, and `lower` default to the X11 backend
+because they are real X11 operations. Selecting `--backend in-memory` for
+`place`, `configure`, `raise`, or `lower` returns a usage error.
+`enforce --dry-run --backend in-memory` can be used for deterministic planning
+diagnostics, but it has no real outputs or windows unless the backend is
+extended by tests.
 
 ## Command Requirements
 
-- `mode` requires `--output` and either `--width` with `--height` or
-  `--rotate`.
-- `modes` and `mode` are transitional display pipeline commands. Once command
-  arguments have passed basic validation and the command begins backend work,
-  each command prints a warning to standard error:
-  `warning: xdisplay-ruler <command> is transitional and will move out of xdisplay-ruler; use xdisplay-attach for display pipeline control when available`.
-- `--rotate` accepts `normal`, `left`, `right`, or `inverted`. It updates the
-  RandR CRTC rotation. If `--width` and `--height` are omitted, the backend
-  reuses the current active mode.
-- `--rate` is optional when `--width` and `--height` are provided.
-- `mode` selects from modes already reported by RandR for the output and sends
-  `SetCrtcConfig` to the output's active CRTC while preserving the CRTC
-  position and output list. When `--rotate` is omitted, it preserves the current
-  rotation. When `--rotate` is provided, it replaces only the basic rotation and
-  preserves existing reflection bits. Width and height are interpreted as the
-  final displayed output size, so `--width 1080 --height 1920 --rotate left`
-  can select an underlying `1920x1080` RandR mode. Before applying a rotated
-  CRTC config, it expands the RandR screen size when needed so the rotated
-  output is not clipped; after the config is accepted, it shrinks the screen
-  size to the active output bounds when possible. It does not create custom
-  modelines.
-- After a successful X11 `mode` switch, the backend remaps every enabled
-  XInput touch device to the selected output by updating its
-  `Coordinate Transformation Matrix` from the output rectangle and basic
-  rotation relative to the root window. If this touch remapping fails after
-  RandR accepts the mode switch, the command still succeeds and prints a
-  warning to standard error.
 - `place` currently requires `--fullscreen`. It uses the selected output
   geometry, configures the target window to that rectangle, and raises the
   window.
@@ -181,7 +139,7 @@ windows unless the backend is extended by tests.
 
 ## Related References
 
-- [Output formats](output-formats.md): snapshot, modes, and dry-run reports.
+- [Output formats](output-formats.md): snapshot and dry-run reports.
 - [Layout enforce](layout.md): layout JSON schema and enforce behavior.
 - [Backends and monitoring](backends-and-monitoring.md): backend capabilities
   and monitor flow.
@@ -192,13 +150,6 @@ Print one X11 snapshot:
 
 ```bash
 xdisplay-ruler
-```
-
-List modes and switch an output to an existing mode:
-
-```bash
-xdisplay-ruler modes --output HDMI-2
-xdisplay-ruler mode --output HDMI-2 --width 1920 --height 1080 --rate 60
 ```
 
 Raise or lower a window:

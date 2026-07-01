@@ -20,12 +20,8 @@ suite and drains its configured events the first time it is polled.
 - `src/backend/x11/mod.rs`: X11 backend entrypoint, connection setup, and backend trait wiring.
 - `src/backend/x11/snapshot.rs`: snapshot collection, window property reads, and relevant-event waiting.
 - `src/backend/x11/control.rs`: X11 window stacking, placement, and geometry requests.
-- `src/backend/x11/output_control.rs`: transitional RandR mode listing, mode switching, CRTC selection, and screen-size changes.
-- `src/backend/x11/mode.rs`: pure mode-selection and screen-size helper logic.
-- `src/backend/x11/touch.rs`: coordinate transformation helpers for XInput touch devices.
-- `src/backend/x11/touch_control.rs`: XInput touch-device remapping after transitional output mode changes.
 - `src/backend/x11/window.rs`: text and WM_CLASS parsing plus X11 window id validation helpers.
-- `src/backend/x11/types.rs`: X11 snapshot and mode-related internal data types.
+- `src/backend/x11/types.rs`: X11 snapshot-related internal data types.
 
 `X11Backend` connects to the Xorg server through the pure Rust `x11rb` protocol
 client. It does not call the `xrandr` command and does not link to `libXrandr`.
@@ -43,22 +39,6 @@ The current X11 backend collects an initial snapshot:
 After the initial snapshot, the X11 backend subscribes to RANDR and root-window
 events. When a relevant event arrives, it refreshes the snapshot and emits a
 state reset followed by the current output and window events.
-
-The current X11 backend can still list and switch output modes during the
-transitional migration window:
-
-- list modes reported by RandR for a selected output
-- mark the current CRTC mode and RandR preferred modes
-- switch to an existing output mode with RandR `SetCrtcConfig`
-- preserve the active CRTC position, rotation, and output list while switching
-  mode, unless a new basic rotation is explicitly selected
-- reuse the current active CRTC mode when only rotation is selected
-- after a successful mode switch, refresh the selected output rectangle and
-  update `Coordinate Transformation Matrix` on every enabled XInput device with
-  a Touch class so touch coordinates follow the output's root-relative
-  rectangle and basic rotation; if this touch remapping fails after RandR
-  accepts the mode switch, the mode change remains successful and the backend
-  returns a warning for the CLI to report
 
 The current X11 backend can also send low-level window configuration requests:
 

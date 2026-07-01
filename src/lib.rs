@@ -8,8 +8,8 @@ mod report;
 pub mod state;
 
 pub use backend::{
-    BackendError, ConfiguredBackend, DisplayBackend, InMemoryBackend, OutputMode, OutputModeChange,
-    OutputModeSelection, OutputRotation, WindowGeometryChange, X11Backend,
+    BackendError, ConfiguredBackend, DisplayBackend, InMemoryBackend, WindowGeometryChange,
+    X11Backend,
 };
 pub use layout::{
     build_enforcement_plan, EnforcementMode, EnforcementPlan, LayoutOperation, LayoutPolicy,

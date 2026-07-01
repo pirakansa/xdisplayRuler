@@ -15,10 +15,6 @@ Usage:
     xdisplay-ruler [snapshot] [--backend NAME]
     xdisplay-ruler watch [--backend NAME] [--iterations N]
 
-  Output Modes:
-    xdisplay-ruler modes --output NAME [--backend x11]
-    xdisplay-ruler mode --output NAME [--width N --height N] [--rate HZ] [--rotate DIR] [--backend x11]
-
   Window Control:
     xdisplay-ruler enforce --layout FILE [--once] [--dry-run] [--interval MS] [--backend x11]
     xdisplay-ruler raise WINDOW_SELECTOR [--backend x11]
@@ -40,8 +36,6 @@ Window Selector:
 Commands:
   snapshot  Print one display-state snapshot. This is the default command.
   watch     Keep refreshing and printing display-state snapshots.
-  modes     List available modes for an output. Transitional.
-  mode      Change an output mode. Transitional.
   enforce   Keep layout-defined windows fitted to their output.
   place     Place a window on an output.
   configure Move or resize a window.
@@ -58,8 +52,6 @@ Global Options:
 
 Output Options:
   --output NAME       X11 RandR output name, for example HDMI-2.
-  --rate HZ           Refresh rate for mode, for example 60 or 59.94.
-  --rotate DIR        Output rotation: normal, left, right, or inverted.
 
 Window Options:
   --fullscreen        Resize and move the selected window to fill the output.
@@ -71,20 +63,12 @@ Geometry Options:
   --height N          Window height for configure. Must be positive.
 
 Notes:
-  modes and mode are transitional display pipeline commands. They still run,
-  but print a warning because display pipeline control is moving to
-  xdisplay-attach.
-  mode requires --output and either --width with --height or --rotate.
-  --rate is optional when --width and --height are provided.
   enforce requires --layout. Without --once or --dry-run, it keeps running.
   place requires WINDOW_SELECTOR, --output, and --fullscreen.
   configure requires WINDOW_SELECTOR and at least one geometry option.
   Window selector name matches are exact and must identify one mapped window.
 
 Examples:
-  xdisplay-ruler modes --output HDMI-2
-  xdisplay-ruler mode --output HDMI-2 --width 1920 --height 1080 --rate 60
-  xdisplay-ruler mode --output HDMI-2 --rotate left
   xdisplay-ruler raise --window-class Gnome-terminal
   xdisplay-ruler lower --window 0x800003
   xdisplay-ruler configure --window-class Gnome-terminal --x 0 --y 0

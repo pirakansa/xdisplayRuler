@@ -7,9 +7,6 @@ default.
 
 - Print one display and window snapshot.
 - Watch display and window changes.
-- List existing RandR output modes during the transitional migration window.
-- Switch an output to one of its existing modes during the transitional
-  migration window.
 - Raise, lower, move, resize, or place mapped X11 windows.
 - Keep layout-defined kiosk windows fitted to output geometry.
 
@@ -27,13 +24,6 @@ Watch display and window changes:
 xdisplay-ruler watch
 ```
 
-List RandR modes for an output. The command still runs, but prints a migration
-warning because display pipeline control is moving out of `xdisplay-ruler`:
-
-```bash
-xdisplay-ruler modes --output HDMI-2
-```
-
 Use the in-memory backend only when you need a deterministic empty snapshot:
 
 ```bash
@@ -43,8 +33,6 @@ xdisplay-ruler snapshot --backend in-memory
 ## Command Map
 
 - [Snapshots](snapshots.md): print, watch, and read display/window state.
-- [Output modes](output-modes.md): transitional mode listing, switching, and
-  output rotation.
 - [Window control](window-control.md): select, raise, lower, move, resize, and
   place windows.
 - [Layout enforcement](layout-enforcement.md): keep kiosk windows fitted to

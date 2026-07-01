@@ -1,4 +1,4 @@
-use crate::{OutputRotation, WindowGeometryChange, WindowId};
+use crate::{WindowGeometryChange, WindowId};
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum CliExit {
@@ -10,8 +10,6 @@ pub enum CliExit {
 pub(super) enum Command {
     Snapshot,
     Watch,
-    Modes,
-    Mode,
     Enforce,
     Place,
     Configure,
@@ -29,10 +27,6 @@ pub(super) struct CliOptions {
     pub(super) once: bool,
     pub(super) dry_run: bool,
     pub(super) interval_millis: usize,
-    pub(super) mode_width: Option<u16>,
-    pub(super) mode_height: Option<u16>,
-    pub(super) mode_refresh_millihertz: Option<u32>,
-    pub(super) mode_rotation: Option<OutputRotation>,
     pub(super) fullscreen: bool,
     pub(super) window_selector: Option<WindowSelector>,
     pub(super) geometry_change: WindowGeometryChange,
@@ -49,10 +43,6 @@ impl Default for CliOptions {
             once: false,
             dry_run: false,
             interval_millis: 1000,
-            mode_width: None,
-            mode_height: None,
-            mode_refresh_millihertz: None,
-            mode_rotation: None,
             fullscreen: false,
             window_selector: None,
             geometry_change: WindowGeometryChange::default(),
@@ -80,16 +70,6 @@ pub(super) fn parse_options(arguments: &[String]) -> Result<CliOptions, String> 
             }
             "watch" => {
                 options.command = Command::Watch;
-                index = 1;
-            }
-            "modes" => {
-                options.command = Command::Modes;
-                options.backend_name = "x11".to_string();
-                index = 1;
-            }
-            "mode" => {
-                options.command = Command::Mode;
-                options.backend_name = "x11".to_string();
                 index = 1;
             }
             "enforce" => {
@@ -180,23 +160,11 @@ pub(super) fn parse_options(arguments: &[String]) -> Result<CliOptions, String> 
             }
             "--width" => {
                 let value = next_value(arguments, &mut index, "--width")?;
-                let width = parse_positive_u32(value, "--width")?;
-                options.geometry_change.width = Some(width);
-                options.mode_width = Some(parse_positive_u16(value, "--width")?);
+                options.geometry_change.width = Some(parse_positive_u32(value, "--width")?);
             }
             "--height" => {
                 let value = next_value(arguments, &mut index, "--height")?;
-                let height = parse_positive_u32(value, "--height")?;
-                options.geometry_change.height = Some(height);
-                options.mode_height = Some(parse_positive_u16(value, "--height")?);
-            }
-            "--rate" => {
-                let value = next_value(arguments, &mut index, "--rate")?;
-                options.mode_refresh_millihertz = Some(parse_refresh_millihertz(value)?);
-            }
-            "--rotate" => {
-                let value = next_value(arguments, &mut index, "--rotate")?;
-                options.mode_rotation = Some(parse_output_rotation(value)?);
+                options.geometry_change.height = Some(parse_positive_u32(value, "--height")?);
             }
             argument => return Err(format!("unknown argument: {argument}")),
         }
@@ -268,53 +236,6 @@ fn parse_positive_u32(value: &str, option_name: &str) -> Result<u32, String> {
     }
 
     Ok(value)
-}
-
-fn parse_positive_u16(value: &str, option_name: &str) -> Result<u16, String> {
-    let value = parse_positive_u32(value, option_name)?;
-
-    u16::try_from(value).map_err(|_| format!("{option_name} must be at most {}", u16::MAX))
-}
-
-pub(super) fn parse_refresh_millihertz(value: &str) -> Result<u32, String> {
-    let (whole, fraction) = value
-        .split_once('.')
-        .map_or((value, ""), |(whole, fraction)| (whole, fraction));
-
-    if whole.is_empty()
-        || !whole.chars().all(|character| character.is_ascii_digit())
-        || !fraction.chars().all(|character| character.is_ascii_digit())
-        || fraction.len() > 3
-    {
-        return Err("--rate must be a positive refresh rate in Hz".to_string());
-    }
-
-    let whole = whole
-        .parse::<u32>()
-        .map_err(|_| "--rate must be a positive refresh rate in Hz".to_string())?;
-    let fraction = format!("{fraction:0<3}")
-        .parse::<u32>()
-        .map_err(|_| "--rate must be a positive refresh rate in Hz".to_string())?;
-    let rate = whole
-        .checked_mul(1000)
-        .and_then(|whole| whole.checked_add(fraction))
-        .ok_or_else(|| "--rate must be a positive refresh rate in Hz".to_string())?;
-
-    if rate == 0 {
-        return Err("--rate must be a positive refresh rate in Hz".to_string());
-    }
-
-    Ok(rate)
-}
-
-pub(super) fn parse_output_rotation(value: &str) -> Result<OutputRotation, String> {
-    match value {
-        "normal" => Ok(OutputRotation::Normal),
-        "left" => Ok(OutputRotation::Left),
-        "right" => Ok(OutputRotation::Right),
-        "inverted" => Ok(OutputRotation::Inverted),
-        _ => Err("--rotate must be one of: normal, left, right, inverted".to_string()),
-    }
 }
 
 pub(super) fn parse_window_id(value: &str) -> Result<WindowId, String> {

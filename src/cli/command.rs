@@ -3,12 +3,10 @@ use std::io::{self, Write};
 use crate::{
     enforce::{self, EnforceOptions},
     report::escape_value,
-    BackendError, ConfiguredBackend, DisplayMonitor, OutputModeChange, OutputModeSelection,
-    WindowId, WindowInfo,
+    BackendError, ConfiguredBackend, DisplayMonitor, WindowId, WindowInfo,
 };
 
 use super::options::{CliExit, CliOptions, WindowSelector};
-use super::report::modes_report;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum StackCommand {
@@ -77,54 +75,6 @@ pub(super) fn run_stack_command(options: CliOptions, command: StackCommand) -> R
         StackCommand::Lower => backend.lower_window(window_id),
     }
     .map_err(|error| error.to_string())
-}
-
-pub(super) fn run_modes_command(
-    options: CliOptions,
-    stderr: &mut impl Write,
-    stdout: &mut impl Write,
-) -> Result<(), String> {
-    let output_name = options
-        .output_name
-        .ok_or_else(|| "--output is required".to_string())?;
-    write_pipeline_command_warning("modes", stderr)?;
-    let backend = build_backend(&options.backend_name)?;
-    let modes = backend
-        .output_modes(&output_name)
-        .map_err(|error| error.to_string())?;
-
-    write!(stdout, "{}", modes_report(&output_name, &modes)).map_err(|error| error.to_string())
-}
-
-pub(super) fn run_mode_command(
-    options: CliOptions,
-    stderr: &mut impl Write,
-) -> Result<OutputModeChange, String> {
-    let output_name = options
-        .output_name
-        .ok_or_else(|| "--output is required".to_string())?;
-    if options.mode_width.is_some() != options.mode_height.is_some() {
-        return Err("--width and --height must be provided together".to_string());
-    }
-    if options.mode_width.is_none() && options.mode_rotation.is_none() {
-        return Err("--width with --height or --rotate is required".to_string());
-    }
-    if options.mode_refresh_millihertz.is_some() && options.mode_width.is_none() {
-        return Err("--rate requires --width and --height".to_string());
-    }
-
-    let selection = OutputModeSelection {
-        width: options.mode_width,
-        height: options.mode_height,
-        refresh_millihertz: options.mode_refresh_millihertz,
-        rotation: options.mode_rotation,
-    };
-    write_pipeline_command_warning("mode", stderr)?;
-    let backend = build_backend(&options.backend_name)?;
-
-    backend
-        .set_output_mode(&output_name, &selection)
-        .map_err(|error| error.to_string())
 }
 
 pub(super) fn run_place_command(options: CliOptions) -> Result<(), String> {
@@ -239,39 +189,12 @@ fn build_backend(name: &str) -> Result<ConfiguredBackend, String> {
     })
 }
 
-fn write_pipeline_command_warning(command: &str, stderr: &mut impl Write) -> Result<(), String> {
-    writeln!(
-        stderr,
-        "warning: xdisplay-ruler {command} is transitional and will move out of xdisplay-ruler; use xdisplay-attach for display pipeline control when available"
-    )
-    .map_err(|error| error.to_string())
-}
-
 pub(super) fn handle_command_result(
     result: Result<(), String>,
     stderr: &mut impl Write,
 ) -> io::Result<CliExit> {
     match result {
         Ok(()) => Ok(CliExit::Success),
-        Err(message) => {
-            writeln!(stderr, "{message}")?;
-            writeln!(stderr, "try --help")?;
-            Ok(CliExit::UsageError)
-        }
-    }
-}
-
-pub(super) fn handle_mode_command_result(
-    result: Result<OutputModeChange, String>,
-    stderr: &mut impl Write,
-) -> io::Result<CliExit> {
-    match result {
-        Ok(change) => {
-            for warning in change.warnings {
-                writeln!(stderr, "warning: {warning}")?;
-            }
-            Ok(CliExit::Success)
-        }
         Err(message) => {
             writeln!(stderr, "{message}")?;
             writeln!(stderr, "try --help")?;
