@@ -49,6 +49,23 @@ fn parses_class_and_instance_selectors() {
 }
 
 #[test]
+fn parses_active_window_rule() {
+    let layout = LayoutPolicy::from_json_str(
+        r#"{
+                "schema_version": 1,
+                "windows": [
+                    { "selector": { "class": "Player" }, "output": "HDMI-2", "activate": true },
+                    { "selector": { "class": "Overlay" }, "output": "HDMI-2" }
+                ]
+            }"#,
+    )
+    .expect("layout should parse");
+
+    assert!(layout.windows[0].activate);
+    assert!(!layout.windows[1].activate);
+}
+
+#[test]
 fn rejects_unknown_fields_and_unsupported_schema_version() {
     assert!(LayoutPolicy::from_json_str(
         r#"{"schema_version":1,"windows":[],"placement":"fullscreen"}"#
@@ -79,6 +96,22 @@ fn selector_must_contain_exactly_one_supported_field() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn rejects_multiple_active_window_rules() {
+    assert!(matches!(
+        LayoutPolicy::from_json_str(
+            r#"{
+                    "schema_version": 1,
+                    "windows": [
+                        { "selector": { "class": "Player" }, "output": "HDMI-2", "activate": true },
+                        { "selector": { "class": "Overlay" }, "output": "HDMI-2", "activate": true }
+                    ]
+                }"#
+        ),
+        Err(LayoutError::MultipleActiveWindows)
+    ));
 }
 
 #[test]
@@ -173,6 +206,37 @@ fn plans_fit_to_output_geometry_only_when_geometry_differs() {
             geometry: Rect::new(100, 50, 1920, 1080),
         }]
     );
+}
+
+#[test]
+fn plans_active_window_operation_after_geometry_and_stacking() {
+    let mut state = test_state();
+    state.apply(DisplayEvent::WindowRaised(WindowId(0x10)));
+    let layout = LayoutPolicy::from_json_str(
+        r#"{
+                "schema_version": 1,
+                "windows": [
+                    { "selector": { "class": "Player" }, "output": "HDMI-2" },
+                    { "selector": { "instance": "overlay" }, "output": "HDMI-2", "activate": true }
+                ]
+            }"#,
+    )
+    .expect("layout should parse");
+
+    let plan =
+        build_enforcement_plan(&layout, &state, EnforcementMode::Once).expect("plan should build");
+
+    assert!(matches!(
+        plan.operations.last(),
+        Some(LayoutOperation::ActivateWindow {
+            id: WindowId(0x20),
+            selector: WindowSelector::Instance(_),
+        })
+    ));
+    assert!(plan
+        .operations
+        .iter()
+        .any(|operation| matches!(operation, LayoutOperation::StackWindowAbove { .. })));
 }
 
 #[test]

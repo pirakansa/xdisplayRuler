@@ -20,6 +20,8 @@ pub struct LayoutPolicy {
 pub struct ManagedWindowRule {
     pub selector: WindowSelector,
     pub output: String,
+    #[serde(default)]
+    pub activate: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -56,6 +58,17 @@ impl LayoutPolicy {
     pub fn validate(&self) -> Result<(), LayoutError> {
         if self.schema_version != SUPPORTED_SCHEMA_VERSION {
             return Err(LayoutError::UnsupportedSchemaVersion(self.schema_version));
+        }
+
+        if self
+            .windows
+            .iter()
+            .filter(|rule| rule.activate)
+            .take(2)
+            .count()
+            > 1
+        {
+            return Err(LayoutError::MultipleActiveWindows);
         }
 
         Ok(())
@@ -138,6 +151,7 @@ pub enum LayoutError {
     },
     OutputNotFound(String),
     OutputDisconnected(String),
+    MultipleActiveWindows,
 }
 
 impl fmt::Display for LayoutError {
@@ -159,6 +173,12 @@ impl fmt::Display for LayoutError {
             Self::OutputNotFound(output) => write!(formatter, "output not found: {output}"),
             Self::OutputDisconnected(output) => {
                 write!(formatter, "output is disconnected: {output}")
+            }
+            Self::MultipleActiveWindows => {
+                write!(
+                    formatter,
+                    "only one layout window rule can set activate: true"
+                )
             }
         }
     }
