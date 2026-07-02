@@ -7,7 +7,7 @@ default.
 
 - Print one display and window snapshot.
 - Watch display and window changes.
-- Raise, lower, move, resize, or place mapped X11 windows.
+- Activate, raise, lower, move, resize, or place mapped X11 windows.
 - Keep layout-defined kiosk windows fitted to output geometry.
 
 ## First Commands
@@ -33,8 +33,8 @@ xdisplay-ruler snapshot --backend in-memory
 ## Command Map
 
 - [Snapshots](snapshots.md): print, watch, and read display/window state.
-- [Window control](window-control.md): select, raise, lower, move, resize, and
-  place windows.
+- [Window control](window-control.md): select, activate, raise, lower, move,
+  resize, and place windows.
 - [Layout enforcement](layout-enforcement.md): keep kiosk windows fitted to
   configured outputs.
 

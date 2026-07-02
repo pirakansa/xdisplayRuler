@@ -26,6 +26,12 @@ The explicit X11 backend form is equivalent:
 xdisplay-ruler snapshot --backend x11
 ```
 
+Activate a window by `WM_CLASS` class name:
+
+```bash
+xdisplay-ruler activate --window-class Gnome-terminal
+```
+
 Raise a window by `WM_CLASS` class name:
 
 ```bash

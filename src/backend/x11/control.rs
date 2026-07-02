@@ -2,7 +2,10 @@ use std::io;
 
 use x11rb::{
     connection::Connection,
-    protocol::xproto::{ConfigureWindowAux, ConnectionExt as XprotoConnection, StackMode},
+    protocol::xproto::{
+        ConfigureWindowAux, ConnectionExt as XprotoConnection, InputFocus, StackMode,
+    },
+    CURRENT_TIME,
 };
 
 use crate::{Rect, WindowGeometryChange, WindowId};
@@ -27,6 +30,17 @@ impl X11Backend {
 
         self.connection
             .configure_window(window, &changes)
+            .map_err(super::to_io_error)?
+            .check()
+            .map_err(super::to_io_error)?;
+        self.connection.flush().map_err(super::to_io_error)
+    }
+
+    pub fn activate_window(&self, id: WindowId) -> io::Result<()> {
+        let window = x11_window_id(id)?;
+
+        self.connection
+            .set_input_focus(InputFocus::PARENT, window, CURRENT_TIME)
             .map_err(super::to_io_error)?
             .check()
             .map_err(super::to_io_error)?;

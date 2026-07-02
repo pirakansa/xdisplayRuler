@@ -5,7 +5,8 @@ The binary is named `xdisplay-ruler`.
 ## Command Groups
 
 - Snapshot commands: inspect the current display and window state.
-- Window control commands: raise, lower, move, resize, or place X11 windows.
+- Window control commands: activate, raise, lower, move, resize, or place X11
+  windows.
 - Layout command: enforce a JSON layout for managed kiosk windows.
 - Other commands: print help or version information.
 
@@ -22,6 +23,7 @@ The binary is named `xdisplay-ruler`.
 - `snapshot`: print the current display snapshot once.
 - `watch`: keep refreshing and printing display snapshots.
 - `enforce`: fit layout-defined windows to their outputs.
+- `activate`: set X11 input focus to a window.
 - `raise`: raise an X11 window above its siblings.
 - `lower`: lower an X11 window below its siblings.
 - `configure`: move or resize an X11 window with explicit geometry values.
@@ -54,7 +56,8 @@ standard error and exits with status `2`.
 
 ### Window Selector Options
 
-`place`, `configure`, `raise`, and `lower` require exactly one window selector:
+`activate`, `place`, `configure`, `raise`, and `lower` require exactly one
+window selector:
 
 - `--window ID`: select an X11 window ID. Hex values such as `0x800003` and
   decimal values are accepted.
@@ -96,6 +99,7 @@ xdisplay-ruler watch [--backend NAME] [--iterations N]
 
 ```text
 xdisplay-ruler enforce --layout FILE [--once] [--dry-run] [--interval MS] [--backend x11]
+xdisplay-ruler activate WINDOW_SELECTOR [--backend x11]
 xdisplay-ruler raise WINDOW_SELECTOR [--backend x11]
 xdisplay-ruler lower WINDOW_SELECTOR [--backend x11]
 xdisplay-ruler configure WINDOW_SELECTOR [--x N] [--y N] [--width N] [--height N] [--backend x11]
@@ -118,9 +122,10 @@ The X11 backend requires a reachable Xorg server through the usual `DISPLAY`
 environment. It verifies that the server provides the RANDR extension before
 collecting a snapshot.
 
-`enforce`, `place`, `configure`, `raise`, and `lower` default to the X11 backend
-because they are real X11 operations. Selecting `--backend in-memory` for
-`place`, `configure`, `raise`, or `lower` returns a usage error.
+`enforce`, `activate`, `place`, `configure`, `raise`, and `lower` default to the
+X11 backend because they are real X11 operations. Selecting `--backend
+in-memory` for `activate`, `place`, `configure`, `raise`, or `lower` returns a
+usage error.
 `enforce --dry-run --backend in-memory` can be used for deterministic planning
 diagnostics, but it has no real outputs or windows unless the backend is
 extended by tests.
@@ -130,6 +135,8 @@ extended by tests.
 - `place` currently requires `--fullscreen`. It uses the selected output
   geometry, configures the target window to that rectangle, and raises the
   window.
+- `activate` sets X11 input focus to the selected window. It does not change
+  stacking order or geometry.
 - `enforce` requires `--layout`. Without `--once` or `--dry-run`, it keeps
   running and reapplies the layout at `--interval`. `--dry-run` prints one
   operation plan and exits. See [Layout enforce](layout.md) for the JSON schema
@@ -152,9 +159,10 @@ Print one X11 snapshot:
 xdisplay-ruler
 ```
 
-Raise or lower a window:
+Activate, raise, or lower a window:
 
 ```bash
+xdisplay-ruler activate --window-class Gnome-terminal
 xdisplay-ruler raise --window-class Gnome-terminal
 xdisplay-ruler lower --window 0x800003
 ```

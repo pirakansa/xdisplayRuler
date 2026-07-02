@@ -19,7 +19,7 @@ suite and drains its configured events the first time it is polled.
 - `src/backend/memory.rs`: deterministic in-memory backend for tests and diagnostics.
 - `src/backend/x11/mod.rs`: X11 backend entrypoint, connection setup, and backend trait wiring.
 - `src/backend/x11/snapshot.rs`: snapshot collection, window property reads, and relevant-event waiting.
-- `src/backend/x11/control.rs`: X11 window stacking, placement, and geometry requests.
+- `src/backend/x11/control.rs`: X11 window focus, stacking, placement, and geometry requests.
 - `src/backend/x11/window.rs`: text and WM_CLASS parsing plus X11 window id validation helpers.
 - `src/backend/x11/types.rs`: X11 snapshot-related internal data types.
 
@@ -42,6 +42,7 @@ state reset followed by the current output and window events.
 
 The current X11 backend can also send low-level window configuration requests:
 
+- set input focus to a window with X11 `SetInputFocus`
 - raise a window with X11 `ConfigureWindow` stack mode `Above`
 - lower a window with X11 `ConfigureWindow` stack mode `Below`
 - move or resize a window by sending provided X, Y, width, and height fields

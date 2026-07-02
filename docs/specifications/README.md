@@ -12,6 +12,7 @@ project evolves. Code and passing tests are the source of truth.
 - X11/RandR and root-window event subscription for watch mode
 - X11 fullscreen placement command
 - X11 layout enforce command for fitting managed windows to output geometry
+- X11 window activation command
 - X11 window raise and lower commands
 - X11 window move and resize command
 - Display output connection, disconnection, geometry, and primary-output state
@@ -22,7 +23,6 @@ project evolves. Code and passing tests are the source of truth.
 ## Out of Scope
 
 - Custom RandR modeline creation
-- Window focus commands
 - Arbitrary per-window layout geometry
 - Persistent configuration
 
