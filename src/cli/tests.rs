@@ -4,12 +4,11 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::{OutputMode, OutputModeChange, OutputRotation, Rect, WindowId, WindowInfo};
+use crate::{Rect, WindowId, WindowInfo};
 
 use super::{
-    command::{handle_mode_command_result, resolve_window_from_list},
-    options::{parse_output_rotation, parse_refresh_millihertz, parse_window_id, WindowSelector},
-    report::modes_report,
+    command::resolve_window_from_list,
+    options::{parse_window_id, WindowSelector},
     run, CliExit,
 };
 
@@ -195,7 +194,7 @@ fn limits_watch_iterations() {
 }
 
 #[test]
-fn requires_output_for_modes_command() {
+fn rejects_removed_mode_commands() {
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
 
@@ -205,231 +204,17 @@ fn requires_output_for_modes_command() {
     assert!(stdout.is_empty());
     assert_eq!(
         String::from_utf8_lossy(&stderr),
-        "--output is required\ntry --help\n"
+        "unknown command: modes\ntry --help\n"
     );
-}
 
-#[test]
-fn requires_output_and_mode_or_rotation_for_mode_command() {
-    let mut stdout = Vec::new();
-    let mut stderr = Vec::new();
-
+    stderr.clear();
     let exit = run(["mode"], &mut stdout, &mut stderr).expect("cli should run");
 
     assert_eq!(exit, CliExit::UsageError);
     assert!(stdout.is_empty());
     assert_eq!(
         String::from_utf8_lossy(&stderr),
-        "--output is required\ntry --help\n"
-    );
-
-    stderr.clear();
-    let exit =
-        run(["mode", "--output", "HDMI-2"], &mut stdout, &mut stderr).expect("cli should run");
-
-    assert_eq!(exit, CliExit::UsageError);
-    assert_eq!(
-        String::from_utf8_lossy(&stderr),
-        "--width with --height or --rotate is required\ntry --help\n"
-    );
-
-    stderr.clear();
-    let exit = run(
-        ["mode", "--output", "HDMI-2", "--width", "1920"],
-        &mut stdout,
-        &mut stderr,
-    )
-    .expect("cli should run");
-
-    assert_eq!(exit, CliExit::UsageError);
-    assert_eq!(
-        String::from_utf8_lossy(&stderr),
-        "--width and --height must be provided together\ntry --help\n"
-    );
-
-    stderr.clear();
-    let exit = run(
-        ["mode", "--output", "HDMI-2", "--rate", "60"],
-        &mut stdout,
-        &mut stderr,
-    )
-    .expect("cli should run");
-
-    assert_eq!(exit, CliExit::UsageError);
-    assert_eq!(
-        String::from_utf8_lossy(&stderr),
-        "--width with --height or --rotate is required\ntry --help\n"
-    );
-}
-
-#[test]
-fn validates_mode_values() {
-    let mut stdout = Vec::new();
-    let mut stderr = Vec::new();
-
-    let exit = run(
-        ["mode", "--output", "HDMI-2", "--width", "70000"],
-        &mut stdout,
-        &mut stderr,
-    )
-    .expect("cli should run");
-
-    assert_eq!(exit, CliExit::UsageError);
-    assert!(stdout.is_empty());
-    assert_eq!(
-        String::from_utf8_lossy(&stderr),
-        "--width must be at most 65535\ntry --help\n"
-    );
-
-    stderr.clear();
-    let exit = run(
-        [
-            "mode", "--output", "HDMI-2", "--width", "1920", "--height", "1080", "--rate",
-            "59.9400",
-        ],
-        &mut stdout,
-        &mut stderr,
-    )
-    .expect("cli should run");
-
-    assert_eq!(exit, CliExit::UsageError);
-    assert_eq!(
-        String::from_utf8_lossy(&stderr),
-        "--rate must be a positive refresh rate in Hz\ntry --help\n"
-    );
-
-    stderr.clear();
-    let exit = run(
-        ["mode", "--output", "HDMI-2", "--rotate", "sideways"],
-        &mut stdout,
-        &mut stderr,
-    )
-    .expect("cli should run");
-
-    assert_eq!(exit, CliExit::UsageError);
-    assert_eq!(
-        String::from_utf8_lossy(&stderr),
-        "--rotate must be one of: normal, left, right, inverted\ntry --help\n"
-    );
-}
-
-#[test]
-fn rejects_mode_commands_for_in_memory_backend() {
-    let mut stdout = Vec::new();
-    let mut stderr = Vec::new();
-
-    let exit = run(
-        ["modes", "--backend", "in-memory", "--output", "HDMI-2"],
-        &mut stdout,
-        &mut stderr,
-    )
-    .expect("cli should run");
-
-    assert_eq!(exit, CliExit::UsageError);
-    assert!(stdout.is_empty());
-    assert_eq!(
-        String::from_utf8_lossy(&stderr),
-        "in-memory backend cannot list X11 output modes\ntry --help\n"
-    );
-
-    stderr.clear();
-    let exit = run(
-        [
-            "mode",
-            "--backend",
-            "in-memory",
-            "--output",
-            "HDMI-2",
-            "--rotate",
-            "left",
-        ],
-        &mut stdout,
-        &mut stderr,
-    )
-    .expect("cli should run");
-
-    assert_eq!(exit, CliExit::UsageError);
-    assert_eq!(
-        String::from_utf8_lossy(&stderr),
-        "in-memory backend cannot change X11 output modes\ntry --help\n"
-    );
-}
-
-#[test]
-fn mode_command_warnings_keep_success_exit_status() {
-    let mut stderr = Vec::new();
-    let exit = handle_mode_command_result(
-        Ok(OutputModeChange {
-            warnings: vec![
-                "output mode changed, but touch remapping failed: test failure".to_string(),
-            ],
-        }),
-        &mut stderr,
-    )
-    .expect("mode result should be handled");
-
-    assert_eq!(exit, CliExit::Success);
-    assert_eq!(
-        String::from_utf8_lossy(&stderr),
-        "warning: output mode changed, but touch remapping failed: test failure\n"
-    );
-}
-
-#[test]
-fn parses_refresh_rates_as_millihertz() {
-    assert_eq!(parse_refresh_millihertz("60"), Ok(60_000));
-    assert_eq!(parse_refresh_millihertz("59.94"), Ok(59_940));
-    assert_eq!(parse_refresh_millihertz("59.940"), Ok(59_940));
-    assert!(parse_refresh_millihertz("0").is_err());
-    assert!(parse_refresh_millihertz("59.9400").is_err());
-    assert!(parse_refresh_millihertz("fast").is_err());
-}
-
-#[test]
-fn parses_output_rotations() {
-    assert_eq!(parse_output_rotation("normal"), Ok(OutputRotation::Normal));
-    assert_eq!(parse_output_rotation("left"), Ok(OutputRotation::Left));
-    assert_eq!(parse_output_rotation("right"), Ok(OutputRotation::Right));
-    assert_eq!(
-        parse_output_rotation("inverted"),
-        Ok(OutputRotation::Inverted)
-    );
-    assert!(parse_output_rotation("sideways").is_err());
-}
-
-#[test]
-fn renders_modes_report() {
-    let report = modes_report(
-        "HDMI-2",
-        &[
-            OutputMode {
-                name: "1920x1080".to_string(),
-                width: 1920,
-                height: 1080,
-                refresh_millihertz: Some(60_000),
-                preferred: true,
-                current: true,
-            },
-            OutputMode {
-                name: "1280\"x720".to_string(),
-                width: 1280,
-                height: 720,
-                refresh_millihertz: Some(59_940),
-                preferred: false,
-                current: false,
-            },
-        ],
-    );
-
-    assert_eq!(
-        report,
-        concat!(
-            "xdisplay-ruler\n",
-            "output: HDMI-2\n",
-            "modes: 2\n",
-            "- 1920x1080 60Hz name=\"1920x1080\" current preferred\n",
-            "- 1280x720 59.94Hz name=\"1280\\\"x720\"\n",
-        )
+        "unknown command: mode\ntry --help\n"
     );
 }
 

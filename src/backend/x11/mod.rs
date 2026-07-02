@@ -2,18 +2,14 @@ use std::io;
 
 mod control;
 mod event;
-mod mode;
-mod output_control;
 mod snapshot;
-mod touch;
-mod touch_control;
 mod types;
 mod window;
 
 use x11rb::{
     connection::Connection,
     protocol::{
-        randr::{self, ConnectionExt as RandrConnectionExt, GetScreenResourcesCurrentReply},
+        randr::{self, ConnectionExt as RandrConnectionExt},
         xproto::{ChangeWindowAttributesAux, ConnectionExt as XprotoConnection, EventMask},
     },
     rust_connection::RustConnection,
@@ -22,9 +18,6 @@ use x11rb::{
 use crate::{DisplayBackend, DisplayEvent};
 
 use event::is_relevant_event;
-
-const COORDINATE_TRANSFORMATION_MATRIX: &str = "Coordinate Transformation Matrix";
-const FLOAT_ATOM: &str = "FLOAT";
 
 #[derive(Debug)]
 pub struct X11Backend {
@@ -87,39 +80,6 @@ impl X11Backend {
             .check()
             .map_err(to_io_error)?;
         self.connection.flush().map_err(to_io_error)
-    }
-
-    pub(super) fn screen_resources(&self) -> io::Result<GetScreenResourcesCurrentReply> {
-        self.connection
-            .randr_get_screen_resources_current(self.root_window())
-            .map_err(to_io_error)?
-            .reply()
-            .map_err(to_io_error)
-    }
-
-    pub(super) fn output_by_name(
-        &self,
-        resources: &GetScreenResourcesCurrentReply,
-        output_name: &str,
-    ) -> io::Result<(randr::Output, randr::GetOutputInfoReply)> {
-        for output in &resources.outputs {
-            let info = self
-                .connection
-                .randr_get_output_info(*output, resources.config_timestamp)
-                .map_err(to_io_error)?
-                .reply()
-                .map_err(to_io_error)?;
-            let name = String::from_utf8_lossy(&info.name);
-
-            if name == output_name {
-                return Ok((*output, info));
-            }
-        }
-
-        Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("output not found: {output_name}"),
-        ))
     }
 
     pub(super) fn intern_atom(&self, name: &str) -> io::Result<u32> {

@@ -1,3 +1,4 @@
+mod layout;
 mod memory;
 mod x11;
 
@@ -5,6 +6,7 @@ use std::io;
 
 use crate::{DisplayEvent, WindowId, WindowInfo};
 
+pub(crate) use layout::WindowLayoutBackend;
 pub use memory::InMemoryBackend;
 pub use x11::X11Backend;
 
@@ -20,37 +22,6 @@ pub struct WindowGeometryChange {
     pub y: Option<i32>,
     pub width: Option<u32>,
     pub height: Option<u32>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct OutputMode {
-    pub name: String,
-    pub width: u16,
-    pub height: u16,
-    pub refresh_millihertz: Option<u32>,
-    pub preferred: bool,
-    pub current: bool,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct OutputModeSelection {
-    pub width: Option<u16>,
-    pub height: Option<u16>,
-    pub refresh_millihertz: Option<u32>,
-    pub rotation: Option<OutputRotation>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum OutputRotation {
-    Normal,
-    Left,
-    Right,
-    Inverted,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct OutputModeChange {
-    pub warnings: Vec<String>,
 }
 
 impl WindowGeometryChange {
@@ -128,30 +99,6 @@ impl ConfiguredBackend {
                 "in-memory backend cannot resolve X11 windows",
             )),
             Self::X11(backend) => backend.windows(),
-        }
-    }
-
-    pub fn output_modes(&self, output_name: &str) -> io::Result<Vec<OutputMode>> {
-        match self {
-            Self::InMemory(_) => Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "in-memory backend cannot list X11 output modes",
-            )),
-            Self::X11(backend) => backend.output_modes(output_name),
-        }
-    }
-
-    pub fn set_output_mode(
-        &self,
-        output_name: &str,
-        selection: &OutputModeSelection,
-    ) -> io::Result<OutputModeChange> {
-        match self {
-            Self::InMemory(_) => Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "in-memory backend cannot change X11 output modes",
-            )),
-            Self::X11(backend) => backend.set_output_mode(output_name, selection),
         }
     }
 

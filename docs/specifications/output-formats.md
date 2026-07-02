@@ -26,21 +26,6 @@ Window rows include mapped state and geometry. They include `title="..."`,
 window title or `WM_CLASS` values. Quotes, backslashes, and control characters
 are escaped in these values.
 
-## Modes Output
-
-`modes --output NAME` prints:
-
-```text
-xdisplay-ruler
-output: HDMI-2
-modes: 2
-- 1920x1080 60Hz name="1920x1080" current preferred
-- 1280x720 59.94Hz name="1280x720"
-```
-
-Mode rows include width, height, refresh rate, RandR mode name, and optional
-`current` and `preferred` markers.
-
 ## Dry-Run Enforce Output
 
 `enforce --dry-run` prints:

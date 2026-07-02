@@ -1,14 +1,11 @@
-use std::{collections::HashSet, io::Write, thread, time::Duration};
+use std::io::Write;
 
 use crate::ConfiguredBackend;
 
 mod executor;
 mod planner;
 mod report;
-
-use executor::apply_plan;
-use planner::EnforcementSession;
-use report::{write_dry_run_report, write_new_warnings, write_warnings};
+mod runner;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct EnforceOptions {
@@ -19,73 +16,14 @@ pub(crate) struct EnforceOptions {
     pub(crate) interval_millis: usize,
 }
 
-impl EnforceOptions {
-    fn single_cycle_mode(&self) -> Option<EnforceCycleMode> {
-        if self.dry_run {
-            Some(EnforceCycleMode::DryRun)
-        } else if self.once {
-            Some(EnforceCycleMode::ApplyOnce)
-        } else {
-            None
-        }
-    }
-
-    fn loop_interval(&self) -> Duration {
-        Duration::from_millis(self.interval_millis as u64)
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum EnforceCycleMode {
-    DryRun,
-    ApplyOnce,
-}
-
 pub(crate) fn run(
     options: EnforceOptions,
     stdout: &mut impl Write,
     stderr: &mut impl Write,
     build_backend: impl Fn(&str) -> Result<ConfiguredBackend, String>,
 ) -> Result<(), String> {
-    let single_cycle_mode = options.single_cycle_mode();
-    let loop_interval = options.loop_interval();
-    let mut session = EnforcementSession::new(&options, build_backend)?;
-
-    if let Some(mode) = single_cycle_mode {
-        run_single_cycle(&mut session, mode, stdout, stderr)
-    } else {
-        run_daemon(&mut session, loop_interval, stderr)
-    }
+    runner::run(options, stdout, stderr, build_backend)
 }
 
-fn run_single_cycle(
-    session: &mut EnforcementSession,
-    mode: EnforceCycleMode,
-    stdout: &mut impl Write,
-    stderr: &mut impl Write,
-) -> Result<(), String> {
-    let plan = match mode {
-        EnforceCycleMode::DryRun => session.build_recoverable_plan()?,
-        EnforceCycleMode::ApplyOnce => session.build_recoverable_plan()?,
-    };
-    write_warnings(&plan, stderr)?;
-
-    match mode {
-        EnforceCycleMode::DryRun => write_dry_run_report(&plan, stdout),
-        EnforceCycleMode::ApplyOnce => apply_plan(session.backend(), &plan),
-    }
-}
-
-fn run_daemon(
-    session: &mut EnforcementSession,
-    interval: Duration,
-    stderr: &mut impl Write,
-) -> Result<(), String> {
-    let mut previous_warnings = HashSet::new();
-    loop {
-        let plan = session.build_recoverable_plan()?;
-        write_new_warnings(&plan, stderr, &mut previous_warnings)?;
-        apply_plan(session.backend(), &plan)?;
-        thread::sleep(interval);
-    }
-}
+#[cfg(test)]
+mod tests;

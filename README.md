@@ -3,8 +3,8 @@
 xdisplayRuler is a Rust CLI foundation for tracking Xorg display and window
 state on kiosk-style Linux systems.
 
-The current build provides display snapshots, watch mode, RandR output mode
-control, X11 window control, and layout enforcement for kiosk-style workflows.
+The current build provides display snapshots, watch mode, X11 window control,
+and layout enforcement for kiosk-style workflows.
 
 ## Quick Start
 
@@ -18,13 +18,6 @@ Watch display and window changes:
 
 ```bash
 xdisplay-ruler watch
-```
-
-List output modes and switch to an existing mode:
-
-```bash
-xdisplay-ruler modes --output HDMI-2
-xdisplay-ruler mode --output HDMI-2 --width 1280 --height 720 --rate 60
 ```
 
 The explicit X11 backend form is equivalent:
@@ -81,7 +74,7 @@ vorbere run build
 ## Documentation
 
 - [User guides](docs/user-guides/README.md): practical workflows for snapshots,
-  output modes, window control, and layout enforcement
+  window control, and layout enforcement
 - [Specification references](docs/specifications/README.md): implemented CLI,
   model, and state behavior
 
@@ -91,15 +84,12 @@ vorbere run build
 - `src/cli/help.rs`: static help text
 - `src/cli/options.rs`: option parsing and value validation
 - `src/cli/command.rs`: backend-facing command execution
-- `src/cli/report.rs`: user-facing text rendering for CLI reports
 - `src/enforce.rs`: layout enforce command orchestration
 - `src/enforce/`: enforce planning, execution, and report rendering
 - `src/layout/policy.rs`: layout schema, selectors, and validation errors
 - `src/layout/planner.rs`: enforce planning and stacking policy decisions
 - `src/backend/x11/snapshot.rs`: X11 snapshot collection, window discovery, and event waiting
 - `src/backend/x11/control.rs`: X11 window control operations
-- `src/backend/x11/output_control.rs`: RandR mode listing and mode changes
-- `src/backend/x11/touch_control.rs`: XInput touch remapping after mode changes
 - `src/state/mod.rs`: display-state reducer and event application
 - `src/state/report.rs`: human-readable state reporting
 - `src/lib.rs`: public module exports

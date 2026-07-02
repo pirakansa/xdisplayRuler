@@ -10,7 +10,6 @@ project evolves. Code and passing tests are the source of truth.
 - Monitor flow that polls a backend and applies events to display state
 - X11/RandR snapshot backend for outputs and root-level windows
 - X11/RandR and root-window event subscription for watch mode
-- X11/RandR output mode listing and mode switching
 - X11 fullscreen placement command
 - X11 layout enforce command for fitting managed windows to output geometry
 - X11 window raise and lower commands
@@ -30,7 +29,7 @@ project evolves. Code and passing tests are the source of truth.
 ## References
 
 - [CLI](cli.md): command-line arguments, output, and exit behavior.
-- [Output formats](output-formats.md): snapshot, modes, and dry-run reports.
+- [Output formats](output-formats.md): snapshot and dry-run reports.
 - [Layout enforce](layout.md): layout JSON schema and enforce behavior.
 - [Backends and monitoring](backends-and-monitoring.md): event source and
   monitor responsibilities.

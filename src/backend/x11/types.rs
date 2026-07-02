@@ -1,6 +1,4 @@
-use x11rb::protocol::{randr, xproto::Timestamp};
-
-use crate::{DisplayEvent, DisplayOutput, OutputMode, Rect, WindowId, WindowInfo};
+use crate::{DisplayEvent, DisplayOutput, Rect, WindowId, WindowInfo};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct X11Snapshot {
@@ -84,63 +82,6 @@ impl X11WindowSnapshot {
 pub(super) struct X11WindowClass {
     pub(super) instance_name: String,
     pub(super) class_name: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct X11ModeInfo {
-    pub(super) id: randr::Mode,
-    pub(super) name: String,
-    pub(super) width: u16,
-    pub(super) height: u16,
-    pub(super) refresh_millihertz: Option<u32>,
-}
-
-impl X11ModeInfo {
-    pub(super) fn public_mode(self, preferred: bool, current: bool) -> OutputMode {
-        OutputMode {
-            name: self.name,
-            width: self.width,
-            height: self.height,
-            refresh_millihertz: self.refresh_millihertz,
-            preferred,
-            current,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) struct ScreenSize {
-    pub(super) width: u16,
-    pub(super) height: u16,
-}
-
-impl ScreenSize {
-    pub(super) fn expanded_to(self, other: Self) -> Self {
-        Self {
-            width: self.width.max(other.width),
-            height: self.height.max(other.height),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) struct ScreenBounds {
-    pub(super) x: i32,
-    pub(super) y: i32,
-    pub(super) width: u32,
-    pub(super) height: u32,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct SelectedCrtcConfig {
-    pub(super) crtc: randr::Crtc,
-    pub(super) config_timestamp: Timestamp,
-    pub(super) x: i16,
-    pub(super) y: i16,
-    pub(super) mode: randr::Mode,
-    pub(super) rotation: randr::Rotation,
-    pub(super) outputs: Vec<randr::Output>,
-    pub(super) screen_size: ScreenSize,
 }
 
 #[cfg(test)]

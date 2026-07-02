@@ -1,20 +1,23 @@
 use crate::{
-    build_enforcement_plan, ConfiguredBackend, DisplayState, EnforcementMode, EnforcementPlan,
-    LayoutPolicy,
+    backend::WindowLayoutBackend, build_enforcement_plan, DisplayState, EnforcementMode,
+    EnforcementPlan, LayoutPolicy,
 };
 
 use super::EnforceOptions;
 
-pub(super) struct EnforcementSession {
-    backend: ConfiguredBackend,
+pub(super) struct EnforcementSession<B> {
+    backend: B,
     state: DisplayState,
     policy: LayoutPolicy,
 }
 
-impl EnforcementSession {
+impl<B> EnforcementSession<B>
+where
+    B: WindowLayoutBackend,
+{
     pub(super) fn new(
         options: &EnforceOptions,
-        build_backend: impl Fn(&str) -> Result<ConfiguredBackend, String>,
+        build_backend: impl Fn(&str) -> Result<B, String>,
     ) -> Result<Self, String> {
         let policy = LayoutPolicy::read_from_path(&options.layout_path)
             .map_err(|error| error.to_string())?;
@@ -27,7 +30,7 @@ impl EnforcementSession {
         })
     }
 
-    pub(super) fn backend(&self) -> &ConfiguredBackend {
+    pub(super) fn backend(&self) -> &B {
         &self.backend
     }
 
