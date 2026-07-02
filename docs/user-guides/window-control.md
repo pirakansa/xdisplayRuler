@@ -19,6 +19,17 @@ Use `--window-class` for common scripting cases because it uses the stable
 windows have the same selector value, the command prints the matching IDs so you
 can rerun it with `--window 0x...`.
 
+## Activate a Window
+
+Set X11 input focus to a window:
+
+```bash
+xdisplay-ruler activate --window-class Gnome-terminal
+```
+
+`activate` sends a low-level X11 input focus request to the selected window. It
+does not raise, move, or resize the window.
+
 ## Change Window Stacking
 
 Raise a window above its siblings:

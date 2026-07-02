@@ -72,6 +72,16 @@ impl ConfiguredBackend {
         }
     }
 
+    pub fn activate_window(&self, id: WindowId) -> io::Result<()> {
+        match self {
+            Self::InMemory(_) => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "in-memory backend cannot activate X11 windows",
+            )),
+            Self::X11(backend) => backend.activate_window(id),
+        }
+    }
+
     pub fn place_window_fullscreen(&self, id: WindowId, output_name: &str) -> io::Result<()> {
         match self {
             Self::InMemory(_) => Err(io::Error::new(

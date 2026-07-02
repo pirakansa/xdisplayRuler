@@ -13,6 +13,7 @@ pub(super) enum Command {
     Enforce,
     Place,
     Configure,
+    Activate,
     Raise,
     Lower,
 }
@@ -84,6 +85,11 @@ pub(super) fn parse_options(arguments: &[String]) -> Result<CliOptions, String> 
             }
             "configure" => {
                 options.command = Command::Configure;
+                options.backend_name = "x11".to_string();
+                index = 1;
+            }
+            "activate" => {
+                options.command = Command::Activate;
                 options.backend_name = "x11".to_string();
                 index = 1;
             }

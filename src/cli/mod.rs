@@ -7,8 +7,8 @@ mod options;
 pub use options::CliExit;
 
 use command::{
-    handle_command_result, run_configure_command, run_enforce_command, run_place_command,
-    run_snapshot, run_stack_command, run_watch, StackCommand,
+    handle_command_result, run_activate_command, run_configure_command, run_enforce_command,
+    run_place_command, run_snapshot, run_stack_command, run_watch, StackCommand,
 };
 use help::HELP;
 use options::{parse_options, Command};
@@ -62,6 +62,7 @@ where
         }
         Command::Place => handle_command_result(run_place_command(options), stderr),
         Command::Configure => handle_command_result(run_configure_command(options), stderr),
+        Command::Activate => handle_command_result(run_activate_command(options), stderr),
         Command::Raise => {
             handle_command_result(run_stack_command(options, StackCommand::Raise), stderr)
         }

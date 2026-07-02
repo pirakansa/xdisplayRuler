@@ -3,7 +3,7 @@ xdisplay-ruler
 
 Overview:
   Inspect Xorg display state and send low-level X11 requests to move, resize,
-  raise, lower, place, or enforce layout for windows.
+  activate, raise, lower, place, or enforce layout for windows.
 
 Quick Start:
   xdisplay-ruler
@@ -17,6 +17,7 @@ Usage:
 
   Window Control:
     xdisplay-ruler enforce --layout FILE [--once] [--dry-run] [--interval MS] [--backend x11]
+    xdisplay-ruler activate WINDOW_SELECTOR [--backend x11]
     xdisplay-ruler raise WINDOW_SELECTOR [--backend x11]
     xdisplay-ruler lower WINDOW_SELECTOR [--backend x11]
     xdisplay-ruler configure WINDOW_SELECTOR [--x N] [--y N] [--width N] [--height N] [--backend x11]
@@ -27,7 +28,7 @@ Usage:
     xdisplay-ruler --version
 
 Window Selector:
-  Use exactly one selector with raise, lower, configure, or place.
+  Use exactly one selector with activate, raise, lower, configure, or place.
     --window ID             X11 window ID, for example 0x800003.
     --window-title NAME     Exact X11 window title.
     --window-class NAME     Exact WM_CLASS class name.
@@ -37,6 +38,7 @@ Commands:
   snapshot  Print one display-state snapshot. This is the default command.
   watch     Keep refreshing and printing display-state snapshots.
   enforce   Keep layout-defined windows fitted to their output.
+  activate  Set input focus to a window.
   place     Place a window on an output.
   configure Move or resize a window.
   raise     Raise a window above its siblings.
@@ -64,11 +66,13 @@ Geometry Options:
 
 Notes:
   enforce requires --layout. Without --once or --dry-run, it keeps running.
+  activate requires WINDOW_SELECTOR.
   place requires WINDOW_SELECTOR, --output, and --fullscreen.
   configure requires WINDOW_SELECTOR and at least one geometry option.
   Window selector name matches are exact and must identify one mapped window.
 
 Examples:
+  xdisplay-ruler activate --window-class Gnome-terminal
   xdisplay-ruler raise --window-class Gnome-terminal
   xdisplay-ruler lower --window 0x800003
   xdisplay-ruler configure --window-class Gnome-terminal --x 0 --y 0

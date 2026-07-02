@@ -8,7 +8,7 @@ use crate::{Rect, WindowId, WindowInfo};
 
 use super::{
     command::resolve_window_from_list,
-    options::{parse_window_id, WindowSelector},
+    options::{parse_options, parse_window_id, Command, WindowSelector},
     run, CliExit,
 };
 
@@ -231,6 +231,72 @@ fn requires_window_for_stack_commands() {
         String::from_utf8_lossy(&stderr),
         "--window, --window-title, --window-class, or --window-instance is required\ntry --help\n"
     );
+}
+
+#[test]
+fn parses_activate_command_with_x11_default_backend() {
+    let options = parse_options(&[
+        "activate".to_string(),
+        "--window".to_string(),
+        "0x800003".to_string(),
+    ])
+    .expect("activate options should parse");
+
+    assert_eq!(options.command, Command::Activate);
+    assert_eq!(options.backend_name, "x11");
+    assert_eq!(
+        options.window_selector,
+        Some(WindowSelector::Id(WindowId(0x800003)))
+    );
+}
+
+#[test]
+fn requires_window_for_activate() {
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+
+    let exit = run(["activate"], &mut stdout, &mut stderr).expect("cli should run");
+
+    assert_eq!(exit, CliExit::UsageError);
+    assert!(stdout.is_empty());
+    assert_eq!(
+        String::from_utf8_lossy(&stderr),
+        "--window, --window-title, --window-class, or --window-instance is required\ntry --help\n"
+    );
+}
+
+#[test]
+fn rejects_activate_for_in_memory_backend() {
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+
+    let exit = run(
+        ["activate", "--backend", "in-memory", "--window", "0x800003"],
+        &mut stdout,
+        &mut stderr,
+    )
+    .expect("cli should run");
+
+    assert_eq!(exit, CliExit::UsageError);
+    assert!(stdout.is_empty());
+    assert_eq!(
+        String::from_utf8_lossy(&stderr),
+        "in-memory backend cannot activate X11 windows\ntry --help\n"
+    );
+}
+
+#[test]
+fn help_lists_activate_command() {
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+
+    let exit = run(["--help"], &mut stdout, &mut stderr).expect("cli should run");
+
+    assert_eq!(exit, CliExit::Success);
+    assert!(stderr.is_empty());
+    let help = String::from_utf8_lossy(&stdout);
+    assert!(help.contains("xdisplay-ruler activate WINDOW_SELECTOR [--backend x11]"));
+    assert!(help.contains("activate  Set input focus to a window."));
 }
 
 #[test]

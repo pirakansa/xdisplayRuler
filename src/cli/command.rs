@@ -77,6 +77,15 @@ pub(super) fn run_stack_command(options: CliOptions, command: StackCommand) -> R
     .map_err(|error| error.to_string())
 }
 
+pub(super) fn run_activate_command(options: CliOptions) -> Result<(), String> {
+    let selector = required_window_selector(&options)?;
+    let backend = build_backend(&options.backend_name)?;
+    let window_id = resolve_window_selector(&backend, &selector)?;
+    backend
+        .activate_window(window_id)
+        .map_err(|error| error.to_string())
+}
+
 pub(super) fn run_place_command(options: CliOptions) -> Result<(), String> {
     let selector = required_window_selector(&options)?;
     let output_name = options
