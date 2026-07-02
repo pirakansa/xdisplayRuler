@@ -59,11 +59,11 @@ Example:
   "unmanaged_windows": "allow_above",
   "windows": [
     {
-      "selector": { "app_id": "Player" },
+      "selector": { "class": "Player" },
       "output": "HDMI-2"
     },
     {
-      "selector": { "app_id": "Overlay" },
+      "selector": { "class": "Overlay" },
       "output": "HDMI-2"
     }
   ]
@@ -84,8 +84,11 @@ A selector must contain exactly one of:
 
 - `id`: X11 window ID string, such as `"0x800003"` or `"8388611"`.
 - `title`: exact X11 window title.
-- `app_id`: exact `WM_CLASS` class name. This is the recommended selector for
-  kiosk layouts.
+- `class`: exact `WM_CLASS` class name.
+- `instance`: exact `WM_CLASS` instance name.
+- `app_id`: deprecated compatibility alias for `class`. It remains accepted in
+  schema version 1 for existing layouts, but new layouts should use `class`.
+  A future schema version may remove `app_id`.
 
 Partial matches, regular expressions, prefixes, and multi-field selectors are
 not supported.

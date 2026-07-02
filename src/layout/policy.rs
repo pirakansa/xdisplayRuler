@@ -26,7 +26,11 @@ pub struct ManagedWindowRule {
 pub enum WindowSelector {
     Id(WindowId),
     Title(String),
+    // Deprecated compatibility alias for Class. Keep accepting it in schema
+    // version 1 so existing layout files continue to work.
     AppId(String),
+    Class(String),
+    Instance(String),
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Deserialize)]
@@ -64,6 +68,10 @@ impl fmt::Display for WindowSelector {
             Self::Id(id) => write!(formatter, "id:{id}"),
             Self::Title(title) => write!(formatter, "title:\"{}\"", escape_value(title)),
             Self::AppId(app_id) => write!(formatter, "app_id:\"{}\"", escape_value(app_id)),
+            Self::Class(class_name) => write!(formatter, "class:\"{}\"", escape_value(class_name)),
+            Self::Instance(instance_name) => {
+                write!(formatter, "instance:\"{}\"", escape_value(instance_name))
+            }
         }
     }
 }
@@ -79,16 +87,20 @@ impl<'de> Deserialize<'de> for WindowSelector {
             id: Option<String>,
             title: Option<String>,
             app_id: Option<String>,
+            class: Option<String>,
+            instance: Option<String>,
         }
 
         let fields = SelectorFields::deserialize(deserializer)?;
         let set_count = usize::from(fields.id.is_some())
             + usize::from(fields.title.is_some())
-            + usize::from(fields.app_id.is_some());
+            + usize::from(fields.app_id.is_some())
+            + usize::from(fields.class.is_some())
+            + usize::from(fields.instance.is_some());
 
         if set_count != 1 {
             return Err(serde::de::Error::custom(
-                "selector must contain exactly one of: id, title, app_id",
+                "selector must contain exactly one of: id, title, app_id, class, instance",
             ));
         }
 
@@ -102,6 +114,12 @@ impl<'de> Deserialize<'de> for WindowSelector {
         }
         if let Some(app_id) = fields.app_id {
             return Ok(Self::AppId(app_id));
+        }
+        if let Some(class_name) = fields.class {
+            return Ok(Self::Class(class_name));
+        }
+        if let Some(instance_name) = fields.instance {
+            return Ok(Self::Instance(instance_name));
         }
 
         unreachable!("selector count was checked above")

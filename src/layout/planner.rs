@@ -194,6 +194,12 @@ fn selector_matches(window: &WindowInfo, selector: &WindowSelector) -> bool {
         WindowSelector::Id(id) => window.id == *id,
         WindowSelector::Title(title) => window.title.as_deref() == Some(title.as_str()),
         WindowSelector::AppId(app_id) => window.class_name.as_deref() == Some(app_id.as_str()),
+        WindowSelector::Class(class_name) => {
+            window.class_name.as_deref() == Some(class_name.as_str())
+        }
+        WindowSelector::Instance(instance_name) => {
+            window.instance_name.as_deref() == Some(instance_name.as_str())
+        }
     }
 }
 

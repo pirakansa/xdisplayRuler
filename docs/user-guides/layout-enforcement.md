@@ -13,11 +13,11 @@ Create a layout file that maps each managed app to a RandR output:
   "unmanaged_windows": "allow_above",
   "windows": [
     {
-      "selector": { "app_id": "Player" },
+      "selector": { "class": "Player" },
       "output": "HDMI-2"
     },
     {
-      "selector": { "app_id": "Overlay" },
+      "selector": { "class": "Overlay" },
       "output": "HDMI-2"
     }
   ]
@@ -25,8 +25,11 @@ Create a layout file that maps each managed app to a RandR output:
 ```
 
 Each managed window is moved and resized to the current geometry of its target
-output. `app_id` matches the X11 `WM_CLASS` class name shown as `class="..."`
-in snapshot output.
+output. Use `class` for the X11 `WM_CLASS` class name shown as `class="..."`
+in snapshot output, or `instance` for the `WM_CLASS` instance name shown as
+`instance="..."`. Existing layouts can still use `app_id`, but it is deprecated
+as a compatibility alias for `class` and may be removed in a future schema
+version.
 
 ## Preview and Apply
 
