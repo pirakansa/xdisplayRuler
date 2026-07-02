@@ -100,7 +100,7 @@ fn dry_run_enforce_exits_after_printing_plan() {
         r#"{
                 "schema_version": 1,
                 "windows": [
-                    { "selector": { "app_id": "Player" }, "output": "HDMI-2" }
+                    { "selector": { "class": "Player" }, "output": "HDMI-2" }
                 ]
             }"#,
     );
@@ -128,7 +128,7 @@ fn dry_run_enforce_exits_after_printing_plan() {
     );
     assert_eq!(
         String::from_utf8_lossy(&stderr),
-        "warning: window not found: app_id:\"Player\"\n"
+        "warning: window not found: class:\"Player\"\n"
     );
 
     fs::remove_file(layout_path).expect("temp layout should be removable");
@@ -140,7 +140,7 @@ fn once_enforce_warns_and_skips_unresolved_rules() {
         r#"{
                 "schema_version": 1,
                 "windows": [
-                    { "selector": { "app_id": "Player" }, "output": "HDMI-2" }
+                    { "selector": { "class": "Player" }, "output": "HDMI-2" }
                 ]
             }"#,
     );
@@ -165,7 +165,7 @@ fn once_enforce_warns_and_skips_unresolved_rules() {
     assert!(stdout.is_empty());
     assert_eq!(
         String::from_utf8_lossy(&stderr),
-        "warning: window not found: app_id:\"Player\"\n"
+        "warning: window not found: class:\"Player\"\n"
     );
 
     fs::remove_file(layout_path).expect("temp layout should be removable");

@@ -63,7 +63,7 @@ mod tests {
         let plan = EnforcementPlan {
             operations: vec![LayoutOperation::ConfigureWindow {
                 id: WindowId(0x20),
-                selector: WindowSelector::AppId("Player".to_string()),
+                selector: WindowSelector::Class("Player".to_string()),
                 output: "HDMI-2".to_string(),
                 geometry: Rect::new(0, 0, 1920, 1080),
             }],
@@ -78,7 +78,7 @@ mod tests {
             concat!(
                 "xdisplay-ruler enforce dry-run\n",
                 "operations: 1\n",
-                "- configure 0x20 selector=app_id:\"Player\" ",
+                "- configure 0x20 selector=class:\"Player\" ",
                 "output=\"HDMI-2\" geometry=1920x1080+0+0\n",
             )
         );
@@ -90,19 +90,19 @@ mod tests {
         let mut stderr = Vec::new();
         let first_plan = EnforcementPlan {
             operations: Vec::new(),
-            warnings: vec!["window not found: app_id:\"Player\"".to_string()],
+            warnings: vec!["window not found: class:\"Player\"".to_string()],
         };
         let second_plan = EnforcementPlan {
             operations: Vec::new(),
             warnings: vec![
-                "window not found: app_id:\"Player\"".to_string(),
-                "window not found: app_id:\"Overlay\"".to_string(),
+                "window not found: class:\"Player\"".to_string(),
+                "window not found: class:\"Overlay\"".to_string(),
             ],
         };
         let clear_plan = EnforcementPlan::default();
         let reappeared_plan = EnforcementPlan {
             operations: Vec::new(),
-            warnings: vec!["window not found: app_id:\"Player\"".to_string()],
+            warnings: vec!["window not found: class:\"Player\"".to_string()],
         };
 
         write_new_warnings(&first_plan, &mut stderr, &mut previous_warnings)
@@ -117,9 +117,9 @@ mod tests {
         assert_eq!(
             String::from_utf8_lossy(&stderr),
             concat!(
-                "warning: window not found: app_id:\"Player\"\n",
-                "warning: window not found: app_id:\"Overlay\"\n",
-                "warning: window not found: app_id:\"Player\"\n",
+                "warning: window not found: class:\"Player\"\n",
+                "warning: window not found: class:\"Overlay\"\n",
+                "warning: window not found: class:\"Player\"\n",
             )
         );
     }

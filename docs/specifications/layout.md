@@ -92,9 +92,6 @@ A selector must contain exactly one of:
 - `title`: exact X11 window title.
 - `class`: exact `WM_CLASS` class name.
 - `instance`: exact `WM_CLASS` instance name.
-- `app_id`: deprecated compatibility alias for `class`. It remains accepted in
-  schema version 1 for existing layouts, but new layouts should use `class`.
-  A future schema version may remove `app_id`.
 
 Partial matches, regular expressions, prefixes, and multi-field selectors are
 not supported.
