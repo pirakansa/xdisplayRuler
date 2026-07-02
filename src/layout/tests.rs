@@ -11,7 +11,7 @@ fn parses_minimal_layout_and_defaults_unmanaged_windows() {
         r#"{
                 "schema_version": 1,
                 "windows": [
-                    { "selector": { "app_id": "Player" }, "output": "HDMI-2" }
+                    { "selector": { "class": "Player" }, "output": "HDMI-2" }
                 ]
             }"#,
     )
@@ -21,7 +21,7 @@ fn parses_minimal_layout_and_defaults_unmanaged_windows() {
     assert_eq!(layout.windows.len(), 1);
     assert_eq!(
         layout.windows[0].selector,
-        WindowSelector::AppId("Player".to_string())
+        WindowSelector::Class("Player".to_string())
     );
 }
 
@@ -72,6 +72,11 @@ fn rejects_unknown_fields_and_unsupported_schema_version() {
     )
     .is_err());
 
+    assert!(LayoutPolicy::from_json_str(
+        r#"{"schema_version":1,"windows":[{"selector":{"app_id":"Player"},"output":"HDMI-2"}]}"#
+    )
+    .is_err());
+
     assert!(matches!(
         LayoutPolicy::from_json_str(r#"{"schema_version":2,"windows":[]}"#),
         Err(LayoutError::UnsupportedSchemaVersion(2))
@@ -86,7 +91,7 @@ fn selector_must_contain_exactly_one_supported_field() {
     .is_err());
     assert!(
         LayoutPolicy::from_json_str(
-            r#"{"schema_version":1,"windows":[{"selector":{"title":"A","app_id":"B"},"output":"HDMI-2"}]}"#
+            r#"{"schema_version":1,"windows":[{"selector":{"title":"A","class":"B"},"output":"HDMI-2"}]}"#
         )
         .is_err()
     );
@@ -115,7 +120,7 @@ fn rejects_multiple_active_window_rules() {
 }
 
 #[test]
-fn matches_id_title_app_id_class_and_instance_selectors() {
+fn matches_id_title_class_and_instance_selectors() {
     let mut state = test_state();
     state.apply(DisplayEvent::WindowConfigured {
         id: WindowId(0x20),
@@ -127,7 +132,6 @@ fn matches_id_title_app_id_class_and_instance_selectors() {
                 "windows": [
                     { "selector": { "id": "0x10" }, "output": "HDMI-2" },
                     { "selector": { "title": "Overlay" }, "output": "HDMI-2" },
-                    { "selector": { "app_id": "Player" }, "output": "HDMI-2" },
                     { "selector": { "class": "Player" }, "output": "HDMI-2" },
                     { "selector": { "instance": "overlay" }, "output": "HDMI-2" }
                 ]
@@ -143,7 +147,7 @@ fn matches_id_title_app_id_class_and_instance_selectors() {
             .iter()
             .filter(|operation| matches!(operation, LayoutOperation::ConfigureWindow { .. }))
             .count(),
-        5
+        4
     );
 }
 
@@ -151,17 +155,17 @@ fn matches_id_title_app_id_class_and_instance_selectors() {
 fn reports_missing_and_ambiguous_selectors_in_once_mode() {
     let state = test_state();
     let missing = LayoutPolicy::from_json_str(
-        r#"{"schema_version":1,"windows":[{"selector":{"app_id":"Missing"},"output":"HDMI-2"}]}"#,
+        r#"{"schema_version":1,"windows":[{"selector":{"class":"Missing"},"output":"HDMI-2"}]}"#,
     )
     .expect("layout should parse");
 
     assert!(matches!(
         build_enforcement_plan(&missing, &state, EnforcementMode::Once),
-        Err(LayoutError::SelectorNotFound(WindowSelector::AppId(_)))
+        Err(LayoutError::SelectorNotFound(WindowSelector::Class(_)))
     ));
 
     let ambiguous = LayoutPolicy::from_json_str(
-        r#"{"schema_version":1,"windows":[{"selector":{"app_id":"Firefox"},"output":"HDMI-2"}]}"#,
+        r#"{"schema_version":1,"windows":[{"selector":{"class":"Firefox"},"output":"HDMI-2"}]}"#,
     )
     .expect("layout should parse");
 
@@ -175,7 +179,7 @@ fn reports_missing_and_ambiguous_selectors_in_once_mode() {
 fn daemon_mode_warns_and_skips_unresolved_rules() {
     let state = test_state();
     let layout = LayoutPolicy::from_json_str(
-        r#"{"schema_version":1,"windows":[{"selector":{"app_id":"Missing"},"output":"Missing"}]}"#,
+        r#"{"schema_version":1,"windows":[{"selector":{"class":"Missing"},"output":"Missing"}]}"#,
     )
     .expect("layout should parse");
 
@@ -183,14 +187,14 @@ fn daemon_mode_warns_and_skips_unresolved_rules() {
         .expect("daemon plan should be recoverable");
 
     assert!(plan.operations.is_empty());
-    assert_eq!(plan.warnings, vec!["window not found: app_id:\"Missing\""]);
+    assert_eq!(plan.warnings, vec!["window not found: class:\"Missing\""]);
 }
 
 #[test]
 fn plans_fit_to_output_geometry_only_when_geometry_differs() {
     let state = test_state();
     let layout = LayoutPolicy::from_json_str(
-        r#"{"schema_version":1,"windows":[{"selector":{"app_id":"Player"},"output":"HDMI-2"}]}"#,
+        r#"{"schema_version":1,"windows":[{"selector":{"class":"Player"},"output":"HDMI-2"}]}"#,
     )
     .expect("layout should parse");
 
@@ -201,7 +205,7 @@ fn plans_fit_to_output_geometry_only_when_geometry_differs() {
         plan.operations,
         vec![LayoutOperation::ConfigureWindow {
             id: WindowId(0x10),
-            selector: WindowSelector::AppId("Player".to_string()),
+            selector: WindowSelector::Class("Player".to_string()),
             output: "HDMI-2".to_string(),
             geometry: Rect::new(100, 50, 1920, 1080),
         }]
@@ -247,7 +251,7 @@ fn keep_below_managed_plans_raises_in_layout_order() {
                 "schema_version": 1,
                 "unmanaged_windows": "keep_below_managed",
                 "windows": [
-                    { "selector": { "app_id": "Player" }, "output": "HDMI-2" },
+                    { "selector": { "class": "Player" }, "output": "HDMI-2" },
                     { "selector": { "title": "Overlay" }, "output": "HDMI-2" }
                 ]
             }"#,
@@ -281,7 +285,7 @@ fn allow_above_plans_relative_stack_operations_for_managed_windows_only() {
         r#"{
                 "schema_version": 1,
                 "windows": [
-                    { "selector": { "app_id": "Player" }, "output": "HDMI-2" },
+                    { "selector": { "class": "Player" }, "output": "HDMI-2" },
                     { "selector": { "title": "Overlay" }, "output": "HDMI-2" }
                 ]
             }"#,
@@ -312,7 +316,7 @@ fn allow_above_skips_stack_operations_when_managed_order_already_matches() {
         r#"{
                 "schema_version": 1,
                 "windows": [
-                    { "selector": { "app_id": "Player" }, "output": "HDMI-2" },
+                    { "selector": { "class": "Player" }, "output": "HDMI-2" },
                     { "selector": { "title": "Overlay" }, "output": "HDMI-2" }
                 ]
             }"#,
@@ -335,7 +339,7 @@ fn reports_missing_or_disconnected_outputs() {
         name: "HDMI-2".to_string(),
     });
     let layout = LayoutPolicy::from_json_str(
-        r#"{"schema_version":1,"windows":[{"selector":{"app_id":"Player"},"output":"HDMI-2"}]}"#,
+        r#"{"schema_version":1,"windows":[{"selector":{"class":"Player"},"output":"HDMI-2"}]}"#,
     )
     .expect("layout should parse");
 

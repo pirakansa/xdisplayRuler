@@ -28,9 +28,7 @@ Create a layout file that maps each managed app to a RandR output:
 Each managed window is moved and resized to the current geometry of its target
 output. Use `class` for the X11 `WM_CLASS` class name shown as `class="..."`
 in snapshot output, or `instance` for the `WM_CLASS` instance name shown as
-`instance="..."`. Existing layouts can still use `app_id`, but it is deprecated
-as a compatibility alias for `class` and may be removed in a future schema
-version.
+`instance="..."`.
 
 Set `activate: true` on one managed window when that window should receive X11
 input focus after each enforce cycle. In the example above, `Overlay` is the
