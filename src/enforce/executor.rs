@@ -27,6 +27,9 @@ fn apply_operation(
         LayoutOperation::RaiseWindow { id, .. } => {
             backend.raise_window(*id).map_err(|error| error.to_string())
         }
+        LayoutOperation::ActivateWindow { id, .. } => backend
+            .activate_window(*id)
+            .map_err(|error| error.to_string()),
         LayoutOperation::StackWindowAbove { id, sibling, .. } => backend
             .stack_window_above(*id, *sibling)
             .map_err(|error| error.to_string()),

@@ -32,8 +32,9 @@ are escaped in these values.
 
 ```text
 xdisplay-ruler enforce dry-run
-operations: 1
-- configure 0x20 selector=app_id:"Player" output="HDMI-2" geometry=1920x1080+0+0
+operations: 2
+- configure 0x20 selector=class:"Player" output="HDMI-2" geometry=1920x1080+0+0
+- activate 0x20 selector=class:"Player"
 ```
 
 Each operation line is the display form of a planned layout operation.

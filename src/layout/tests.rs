@@ -26,6 +26,46 @@ fn parses_minimal_layout_and_defaults_unmanaged_windows() {
 }
 
 #[test]
+fn parses_class_and_instance_selectors() {
+    let layout = LayoutPolicy::from_json_str(
+        r#"{
+                "schema_version": 1,
+                "windows": [
+                    { "selector": { "class": "Player" }, "output": "HDMI-2" },
+                    { "selector": { "instance": "overlay" }, "output": "HDMI-2" }
+                ]
+            }"#,
+    )
+    .expect("layout should parse");
+
+    assert_eq!(
+        layout.windows[0].selector,
+        WindowSelector::Class("Player".to_string())
+    );
+    assert_eq!(
+        layout.windows[1].selector,
+        WindowSelector::Instance("overlay".to_string())
+    );
+}
+
+#[test]
+fn parses_active_window_rule() {
+    let layout = LayoutPolicy::from_json_str(
+        r#"{
+                "schema_version": 1,
+                "windows": [
+                    { "selector": { "class": "Player" }, "output": "HDMI-2", "activate": true },
+                    { "selector": { "class": "Overlay" }, "output": "HDMI-2" }
+                ]
+            }"#,
+    )
+    .expect("layout should parse");
+
+    assert!(layout.windows[0].activate);
+    assert!(!layout.windows[1].activate);
+}
+
+#[test]
 fn rejects_unknown_fields_and_unsupported_schema_version() {
     assert!(LayoutPolicy::from_json_str(
         r#"{"schema_version":1,"windows":[],"placement":"fullscreen"}"#
@@ -50,10 +90,32 @@ fn selector_must_contain_exactly_one_supported_field() {
         )
         .is_err()
     );
+    assert!(
+        LayoutPolicy::from_json_str(
+            r#"{"schema_version":1,"windows":[{"selector":{"class":"A","instance":"B"},"output":"HDMI-2"}]}"#
+        )
+        .is_err()
+    );
 }
 
 #[test]
-fn matches_id_title_and_app_id_selectors() {
+fn rejects_multiple_active_window_rules() {
+    assert!(matches!(
+        LayoutPolicy::from_json_str(
+            r#"{
+                    "schema_version": 1,
+                    "windows": [
+                        { "selector": { "class": "Player" }, "output": "HDMI-2", "activate": true },
+                        { "selector": { "class": "Overlay" }, "output": "HDMI-2", "activate": true }
+                    ]
+                }"#
+        ),
+        Err(LayoutError::MultipleActiveWindows)
+    ));
+}
+
+#[test]
+fn matches_id_title_app_id_class_and_instance_selectors() {
     let mut state = test_state();
     state.apply(DisplayEvent::WindowConfigured {
         id: WindowId(0x20),
@@ -65,7 +127,9 @@ fn matches_id_title_and_app_id_selectors() {
                 "windows": [
                     { "selector": { "id": "0x10" }, "output": "HDMI-2" },
                     { "selector": { "title": "Overlay" }, "output": "HDMI-2" },
-                    { "selector": { "app_id": "Player" }, "output": "HDMI-2" }
+                    { "selector": { "app_id": "Player" }, "output": "HDMI-2" },
+                    { "selector": { "class": "Player" }, "output": "HDMI-2" },
+                    { "selector": { "instance": "overlay" }, "output": "HDMI-2" }
                 ]
             }"#,
     )
@@ -79,7 +143,7 @@ fn matches_id_title_and_app_id_selectors() {
             .iter()
             .filter(|operation| matches!(operation, LayoutOperation::ConfigureWindow { .. }))
             .count(),
-        3
+        5
     );
 }
 
@@ -142,6 +206,37 @@ fn plans_fit_to_output_geometry_only_when_geometry_differs() {
             geometry: Rect::new(100, 50, 1920, 1080),
         }]
     );
+}
+
+#[test]
+fn plans_active_window_operation_after_geometry_and_stacking() {
+    let mut state = test_state();
+    state.apply(DisplayEvent::WindowRaised(WindowId(0x10)));
+    let layout = LayoutPolicy::from_json_str(
+        r#"{
+                "schema_version": 1,
+                "windows": [
+                    { "selector": { "class": "Player" }, "output": "HDMI-2" },
+                    { "selector": { "instance": "overlay" }, "output": "HDMI-2", "activate": true }
+                ]
+            }"#,
+    )
+    .expect("layout should parse");
+
+    let plan =
+        build_enforcement_plan(&layout, &state, EnforcementMode::Once).expect("plan should build");
+
+    assert!(matches!(
+        plan.operations.last(),
+        Some(LayoutOperation::ActivateWindow {
+            id: WindowId(0x20),
+            selector: WindowSelector::Instance(_),
+        })
+    ));
+    assert!(plan
+        .operations
+        .iter()
+        .any(|operation| matches!(operation, LayoutOperation::StackWindowAbove { .. })));
 }
 
 #[test]
@@ -261,19 +356,23 @@ fn test_state() -> DisplayState {
     let mut player = WindowInfo::mapped(WindowId(0x10), Rect::new(0, 0, 800, 600));
     player.title = Some("Player".to_string());
     player.class_name = Some("Player".to_string());
+    player.instance_name = Some("player".to_string());
     state.apply(DisplayEvent::WindowMapped(player));
 
     let mut overlay = WindowInfo::mapped(WindowId(0x20), Rect::new(100, 50, 1920, 1080));
     overlay.title = Some("Overlay".to_string());
     overlay.class_name = Some("Overlay".to_string());
+    overlay.instance_name = Some("overlay".to_string());
     state.apply(DisplayEvent::WindowMapped(overlay));
 
     let mut firefox = WindowInfo::mapped(WindowId(0x30), Rect::new(0, 0, 800, 600));
     firefox.class_name = Some("Firefox".to_string());
+    firefox.instance_name = Some("firefox".to_string());
     state.apply(DisplayEvent::WindowMapped(firefox));
 
     let mut second_firefox = WindowInfo::mapped(WindowId(0x40), Rect::new(0, 0, 800, 600));
     second_firefox.class_name = Some("Firefox".to_string());
+    second_firefox.instance_name = Some("firefox".to_string());
     state.apply(DisplayEvent::WindowMapped(second_firefox));
 
     state

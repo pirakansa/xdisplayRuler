@@ -59,12 +59,13 @@ Example:
   "unmanaged_windows": "allow_above",
   "windows": [
     {
-      "selector": { "app_id": "Player" },
+      "selector": { "class": "Player" },
       "output": "HDMI-2"
     },
     {
-      "selector": { "app_id": "Overlay" },
-      "output": "HDMI-2"
+      "selector": { "class": "Overlay" },
+      "output": "HDMI-2",
+      "activate": true
     }
   ]
 }
@@ -74,9 +75,14 @@ Each window rule has:
 
 - `selector`: required window selector.
 - `output`: required RandR output name.
+- `activate`: optional boolean. Defaults to `false`. The one rule with
+  `activate: true` becomes the active X11 input focus target after geometry and
+  stacking operations are planned.
 
 Rules do not accept `geometry` or `placement`. A managed window is always fitted
 to the current geometry of its target output.
+
+At most one window rule can set `activate: true`.
 
 ## Selectors
 
@@ -84,8 +90,11 @@ A selector must contain exactly one of:
 
 - `id`: X11 window ID string, such as `"0x800003"` or `"8388611"`.
 - `title`: exact X11 window title.
-- `app_id`: exact `WM_CLASS` class name. This is the recommended selector for
-  kiosk layouts.
+- `class`: exact `WM_CLASS` class name.
+- `instance`: exact `WM_CLASS` instance name.
+- `app_id`: deprecated compatibility alias for `class`. It remains accepted in
+  schema version 1 for existing layouts, but new layouts should use `class`.
+  A future schema version may remove `app_id`.
 
 Partial matches, regular expressions, prefixes, and multi-field selectors are
 not supported.
@@ -116,13 +125,15 @@ Each enforce cycle:
 5. For `allow_above`, plans sibling stack operations when managed windows are
    not in layout order.
 6. For `keep_below_managed`, adds `RaiseWindow` operations in layout order.
-7. Applies the planned operations unless `--dry-run` was used.
+7. Adds an `ActivateWindow` operation for the resolved rule with
+   `activate: true`, if one is configured.
+8. Applies the planned operations unless `--dry-run` was used.
 
 ## Error Handling
 
 Layout read errors, invalid JSON, unsupported schema versions, missing required
-fields, unknown fields, invalid selector shapes, and invalid option values are
-usage errors.
+fields, unknown fields, invalid selector shapes, multiple `activate: true`
+rules, and invalid option values are usage errors.
 
 In `--once`, `--dry-run`, and recurring mode:
 

@@ -30,6 +30,10 @@ pub enum LayoutOperation {
         id: WindowId,
         selector: WindowSelector,
     },
+    ActivateWindow {
+        id: WindowId,
+        selector: WindowSelector,
+    },
     StackWindowAbove {
         id: WindowId,
         selector: WindowSelector,
@@ -44,6 +48,7 @@ pub fn build_enforcement_plan(
 ) -> Result<EnforcementPlan, LayoutError> {
     let mut plan = EnforcementPlan::default();
     let mut managed_windows = Vec::new();
+    let mut active_window = None;
 
     for rule in &policy.windows {
         let Some(window) = resolve_window_rule(rule, state, mode, &mut plan.warnings)? else {
@@ -55,6 +60,9 @@ pub fn build_enforcement_plan(
         };
 
         managed_windows.push((window.id, rule.selector.clone()));
+        if rule.activate {
+            active_window = Some((window.id, rule.selector.clone()));
+        }
 
         if window.geometry != output_geometry {
             plan.operations.push(LayoutOperation::ConfigureWindow {
@@ -72,6 +80,11 @@ pub fn build_enforcement_plan(
         &managed_windows,
     ));
 
+    if let Some((id, selector)) = active_window {
+        plan.operations
+            .push(LayoutOperation::ActivateWindow { id, selector });
+    }
+
     Ok(plan)
 }
 
@@ -84,7 +97,9 @@ impl LayoutOperation {
                 width: Some(geometry.width),
                 height: Some(geometry.height),
             }),
-            Self::RaiseWindow { .. } | Self::StackWindowAbove { .. } => None,
+            Self::RaiseWindow { .. }
+            | Self::ActivateWindow { .. }
+            | Self::StackWindowAbove { .. } => None,
         }
     }
 }
@@ -104,6 +119,9 @@ impl fmt::Display for LayoutOperation {
             ),
             Self::RaiseWindow { id, selector } => {
                 write!(formatter, "raise {id} selector={selector}")
+            }
+            Self::ActivateWindow { id, selector } => {
+                write!(formatter, "activate {id} selector={selector}")
             }
             Self::StackWindowAbove {
                 id,
@@ -194,6 +212,12 @@ fn selector_matches(window: &WindowInfo, selector: &WindowSelector) -> bool {
         WindowSelector::Id(id) => window.id == *id,
         WindowSelector::Title(title) => window.title.as_deref() == Some(title.as_str()),
         WindowSelector::AppId(app_id) => window.class_name.as_deref() == Some(app_id.as_str()),
+        WindowSelector::Class(class_name) => {
+            window.class_name.as_deref() == Some(class_name.as_str())
+        }
+        WindowSelector::Instance(instance_name) => {
+            window.instance_name.as_deref() == Some(instance_name.as_str())
+        }
     }
 }
 

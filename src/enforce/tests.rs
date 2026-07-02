@@ -17,6 +17,7 @@ use super::{runner::run_with_layout_backend, EnforceOptions};
 struct LayoutOnlyBackend {
     events: Vec<DisplayEvent>,
     configured_windows: Rc<RefCell<Vec<(WindowId, WindowGeometryChange)>>>,
+    activated_windows: Rc<RefCell<Vec<WindowId>>>,
 }
 
 impl WindowLayoutBackend for LayoutOnlyBackend {
@@ -35,6 +36,11 @@ impl WindowLayoutBackend for LayoutOnlyBackend {
         Ok(())
     }
 
+    fn activate_window(&self, id: WindowId) -> io::Result<()> {
+        self.activated_windows.borrow_mut().push(id);
+        Ok(())
+    }
+
     fn stack_window_above(&self, _id: WindowId, _sibling: WindowId) -> io::Result<()> {
         Ok(())
     }
@@ -46,11 +52,12 @@ fn enforce_runs_with_layout_only_backend() {
         r#"{
                 "schema_version": 1,
                 "windows": [
-                    { "selector": { "app_id": "Player" }, "output": "HDMI-2" }
+                    { "selector": { "class": "Player" }, "output": "HDMI-2", "activate": true }
                 ]
             }"#,
     );
     let configured_windows = Rc::new(RefCell::new(Vec::new()));
+    let activated_windows = Rc::new(RefCell::new(Vec::new()));
     let backend = LayoutOnlyBackend {
         events: vec![
             DisplayEvent::OutputConnected(DisplayOutput::connected(
@@ -61,6 +68,7 @@ fn enforce_runs_with_layout_only_backend() {
             DisplayEvent::WindowMapped(test_window()),
         ],
         configured_windows: Rc::clone(&configured_windows),
+        activated_windows: Rc::clone(&activated_windows),
     };
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
@@ -93,6 +101,7 @@ fn enforce_runs_with_layout_only_backend() {
             },
         )]
     );
+    assert_eq!(*activated_windows.borrow(), vec![WindowId(0x10)]);
 
     fs::remove_file(layout_path).expect("temp layout should be removable");
 }

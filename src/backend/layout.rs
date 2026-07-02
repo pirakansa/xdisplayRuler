@@ -9,6 +9,8 @@ pub(crate) trait WindowLayoutBackend {
 
     fn raise_window(&self, id: WindowId) -> io::Result<()>;
 
+    fn activate_window(&self, id: WindowId) -> io::Result<()>;
+
     fn stack_window_above(&self, id: WindowId, sibling: WindowId) -> io::Result<()>;
 }
 
@@ -23,6 +25,10 @@ impl WindowLayoutBackend for ConfiguredBackend {
 
     fn raise_window(&self, id: WindowId) -> io::Result<()> {
         Self::raise_window(self, id)
+    }
+
+    fn activate_window(&self, id: WindowId) -> io::Result<()> {
+        Self::activate_window(self, id)
     }
 
     fn stack_window_above(&self, id: WindowId, sibling: WindowId) -> io::Result<()> {
